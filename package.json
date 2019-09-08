@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "line-by-line": "^0.1.6",
+    "pg": "^7.12.0"
+  }
+}
