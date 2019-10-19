@@ -392,6 +392,8 @@ var helper = {
                         return `'${JSON.stringify(value).replace(/'/g, "''")}'`;
                     case "xml":
                         return `'${value.replace(/'/g, "''")}'`;
+                    case "uuid":
+                        return `'${value.replace(/'/g, "''")}'`;
                     default:
                         throw new Error(`The data type '${dataTypeName}' is not implemented yet!`);
                 }
