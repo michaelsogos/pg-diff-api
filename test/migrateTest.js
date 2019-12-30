@@ -1,7 +1,7 @@
 const PgDiff = require("../src/index").PgDiff;
 const Config = require("../src/index").Config;
 
-Config.migrationHistoryTableName = "test_migrations";
+Config.migrationOptions.historyTableName = "test_migrations";
 Config.targetClient.database = "pgdiff_test";
 Config.targetClient.password = "f";
 Config.patchesFolder = ".\\test\\patches";

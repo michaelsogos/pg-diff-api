@@ -10,7 +10,7 @@ class PgDiff {
         return await migrationApi.migrate(this.config, force);
     }
 
-    async compare(){
+    async compare() {
         return await compareApi.compare();
     }
 }

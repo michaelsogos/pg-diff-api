@@ -6,6 +6,11 @@ const patchStatus = require("../enums/patchStatus");
 const textReader = require("line-by-line");
 
 class MigrationApi {
+    /**
+     *
+     * @param {import("../models/config")} config
+     * @param {Boolean} force
+     */
     static async migrate(config, force) {
         let migrationConfig = core.prepareMigrationConfig(config);
         let pgClient = await core.makePgClient(config.targetClient);
@@ -180,7 +185,7 @@ class MigrationApi {
 
         let filterConditions = {
             version: patchScript.version,
-            name: patchScript.name
+            name: patchScript.name,
         };
 
         let command = sql.generateUpdateTableRecordScript(

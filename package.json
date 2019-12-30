@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "deep-equal": "^2.0.1",
     "line-by-line": "^0.1.6",
     "pg": "^7.12.0"
   }

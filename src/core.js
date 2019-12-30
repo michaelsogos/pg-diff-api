@@ -3,17 +3,22 @@ const pg = require("pg");
 const migrationHistoryTableSchema = require("./models/migrationHistoryTableSchema");
 const sql = require("./sqlScriptGenerator");
 const PatchInfo = require("./models/patchInfo");
+const ServerVersion = require("./models/serverVersion");
 
 class core {
+    /**
+     *
+     * @param {import("./models/config")} config
+     */
     static prepareMigrationConfig(config) {
         if (!config.patchesFolder) throw new Error('Missing configuration property "patchesFolder"!');
         return {
             patchesFolder: path.isAbsolute(config.patchesFolder) ? config.patchesFolder : path.resolve(process.cwd(), config.patchesFolder),
             migrationHistory: {
-                tableName: config.migrationHistoryTableName,
-                tableSchema: config.migrationHistoryTableSchema,
-                fullTableName: `"${config.migrationHistoryTableSchema}"."${config.migrationHistoryTableName}"`,
-                primaryKeyName: `"${config.migrationHistoryTableName}_pkey"`,
+                tableName: config.migrationOptions.historyTableName,
+                tableSchema: config.migrationOptions.historyTableSchema,
+                fullTableName: `"${config.migrationOptions.historyTableSchema}"."${config.migrationOptions.historyTableName}"`,
+                primaryKeyName: `"${config.migrationOptions.historyTableName}_pkey"`,
                 tableOwner: config.targetClient.user,
                 tableColumns: this.extractColumnsDefinitionFromSchema(migrationHistoryTableSchema),
             },
@@ -74,7 +79,38 @@ class core {
             application_name: config.applicationName,
         });
         await client.connect();
+
+        client.version = await this.getServerVersion(client);
+
         return client;
+    }
+
+    /**
+     *
+     * @param {import("pg").Client} client
+     */
+    static async getServerVersion(client) {
+        let version = null;
+        let queryResult = await client.query("SELECT current_setting('server_version')");
+        if (queryResult && queryResult.rows.length == 1 && queryResult.rows[0].current_setting) version = queryResult.rows[0].current_setting;
+
+        if (typeof version != "string") return null;
+
+        var splittedVersion = version.split(".");
+
+        return new ServerVersion(parseInt(splittedVersion[0]), parseInt(splittedVersion[1]), parseInt(splittedVersion[2]), version);
+    }
+
+    /**
+     *
+     * @param {import("./models/serverVersion")} serverVersion
+     * @param {Number} majorVersion
+     * @param {Number} minorVersion
+     * @returns {Boolean}
+     */
+    static checkServerCompatibility(serverVersion, majorVersion, minorVersion) {
+        if (serverVersion != null && serverVersion.major >= majorVersion && client.version.minor >= minorVersion) return true;
+        else return false;
     }
 }
 

@@ -11,6 +11,10 @@ const hints = {
 };
 
 var helper = {
+    /**
+     *
+     * @param {Object} columnSchema
+     */
     __generateColumnDataTypeDefinition: function(columnSchema) {
         let dataType = columnSchema.datatype;
         if (columnSchema.precision) {
@@ -20,6 +24,11 @@ var helper = {
 
         return dataType;
     },
+    /**
+     *
+     * @param {String} column
+     * @param {Object} columnSchema
+     */
     __generateColumnDefinition: function(column, columnSchema) {
         let defaultValue = "";
         if (columnSchema.default) defaultValue = `DEFAULT ${columnSchema.default}`;
@@ -31,6 +40,12 @@ var helper = {
 
         return `${column} ${dataType} ${columnSchema.nullable ? "NULL" : "NOT NULL"} ${defaultValue} ${identityValue}`;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} role
+     * @param {Object} privileges
+     */
     __generateTableGrantsDefinition: function(table, role, privileges) {
         let definitions = [];
 
@@ -50,6 +65,13 @@ var helper = {
 
         return definitions;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {String} argTypes
+     * @param {String} role
+     * @param {Object} privileges
+     */
     __generateProcedureGrantsDefinition: function(procedure, argTypes, role, privileges) {
         let definitions = [];
 
@@ -57,6 +79,12 @@ var helper = {
 
         return definitions;
     },
+    /**
+     *
+     * @param {String} sequence
+     * @param {String} role
+     * @param {Object} privileges
+     */
     __generateSequenceGrantsDefinition: function(sequence, role, privileges) {
         let definitions = [];
 
@@ -68,14 +96,28 @@ var helper = {
 
         return definitions;
     },
+    /**
+     *
+     * @param {String} schema
+     * @param {String} owner
+     */
     generateCreateSchemaScript: function(schema, owner) {
         let script = `\nCREATE SCHEMA IF NOT EXISTS ${schema} AUTHORIZATION ${owner};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     */
     generateDropTableScript: function(table) {
         let script = `\nDROP TABLE IF EXISTS ${table};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {Object} schema
+     */
     generateCreateTableScript: function(table, schema) {
         //Generate columns script
         let columns = [];
@@ -113,6 +155,12 @@ var helper = {
         )}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} column
+     * @param {Object} schema
+     */
     generateAddTableColumnScript: function(table, column, schema) {
         let script = `\nALTER TABLE IF EXISTS ${table} ADD COLUMN IF NOT EXISTS ${this.__generateColumnDefinition(column, schema)};`;
         if (script.includes("NOT NULL") && !script.includes("DEFAULT")) script += hints.addColumnNotNullableWithoutDefaultValue;
@@ -120,6 +168,12 @@ var helper = {
         script += "\n";
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} column
+     * @param {Object} changes
+     */
     generateChangeTableColumnScript: function(table, column, changes) {
         let definitions = [];
         if (changes.hasOwnProperty("nullable")) definitions.push(`ALTER COLUMN ${column} ${changes.nullable ? "DROP NOT NULL" : "SET NOT NULL"}`);
@@ -153,18 +207,39 @@ var helper = {
 
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} column
+     */
     generateDropTableColumnScript: function(table, column) {
         let script = `\nALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS ${column} CASCADE;${hints.dropColumn}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} constraint
+     * @param {Object} schema
+     */
     generateAddTableConstraintScript: function(table, constraint, schema) {
         let script = `\nALTER TABLE IF EXISTS ${table} ADD CONSTRAINT ${constraint} ${schema.definition};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} constraint
+     */
     generateDropTableConstraintScript: function(table, constraint) {
         let script = `\nALTER TABLE IF EXISTS ${table} DROP CONSTRAINT IF EXISTS ${constraint};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {Object} options
+     */
     generateChangeTableOptionsScript: function(table, options) {
         let script = `\nALTER TABLE IF EXISTS ${table} SET ${options.withOids ? "WITH" : "WITHOUT"} OIDS;\n`;
         return script;
@@ -173,14 +248,30 @@ var helper = {
         let script = `\nDROP INDEX IF EXISTS ${index};\n${definition};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} index
+     */
     generateDropIndexScript: function(index) {
         let script = `\nDROP INDEX IF EXISTS ${index};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} role
+     * @param {Object} privileges
+     */
     generateTableRoleGrantsScript: function(table, role, privileges) {
         let script = `\n${this.__generateTableGrantsDefinition(table, role, privileges).join("\n")}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} role
+     * @param {Object} changes
+     */
     generateChangesTableRoleGrantsScript: function(table, role, changes) {
         let privileges = [];
 
@@ -236,10 +327,20 @@ var helper = {
         let script = `\n${privileges.join("\n")}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {String} owner
+     */
     generateChangeTableOwnerScript: function(table, owner) {
         let script = `\nALTER TABLE IF EXISTS ${table} OWNER TO ${owner};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} view
+     * @param {Object} schema
+     */
     generateCreateViewScript: function(view, schema) {
         //Generate privileges script
         let privileges = [];
@@ -251,10 +352,19 @@ var helper = {
         let script = `\nCREATE OR REPLACE VIEW ${view} AS ${schema.definition}\n${privileges.join("\n")}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} view
+     */
     generateDropViewScript: function(view) {
         let script = `\nDROP VIEW IF EXISTS ${view};`;
         return script;
     },
+    /**
+     *
+     * @param {String} view
+     * @param {Object} schema
+     */
     generateCreateMaterializedViewScript: function(view, schema) {
         //Generate indexes script
         let indexes = [];
@@ -272,10 +382,19 @@ var helper = {
         let script = `\nCREATE MATERIALIZED VIEW IF NOT EXISTS ${view} AS ${schema.definition}\n${indexes.join("\n")}\n${privileges.join("\n")}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} view
+     */
     generateDropMaterializedViewScript: function(view) {
         let script = `\nDROP MATERIALIZED VIEW IF EXISTS ${view};`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {Object} schema
+     */
     generateCreateProcedureScript: function(procedure, schema) {
         //Generate privileges script
         let privileges = [];
@@ -287,18 +406,41 @@ var helper = {
         let script = `\n${schema.definition};\n${privileges.join("\n")}\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {Object} schema
+     */
     generateChangeProcedureScript: function(procedure, schema) {
         let script = `\nDROP FUNCTION IF EXISTS ${procedure}(${schema.argTypes});\n${this.generateCreateProcedureScript(procedure, schema)}`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     */
     generateDropProcedureScript: function(procedure) {
         let script = `\nDROP FUNCTION IF EXISTS ${procedure};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {String} argTypes
+     * @param {String} role
+     * @param {Object} privileges
+     */
     generateProcedureRoleGrantsScript: function(procedure, argTypes, role, privileges) {
         let script = `\n${this.__generateProcedureGrantsDefinition(procedure, argTypes, role, privileges).join("\n")}`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {String} argTypes
+     * @param {String} role
+     * @param {Object} changes
+     */
     generateChangesProcedureRoleGrantsScript: function(procedure, argTypes, role, changes) {
         let privileges = [];
 
@@ -312,6 +454,12 @@ var helper = {
         let script = `\n${privileges.join("\n")}`;
         return script;
     },
+    /**
+     *
+     * @param {String} procedure
+     * @param {String} argTypes
+     * @param {String} owner
+     */
     generateChangeProcedureOwnerScript: function(procedure, argTypes, owner) {
         let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
         return script;
@@ -388,6 +536,7 @@ var helper = {
             case "U": {
                 //USER TYPE
                 switch (dataTypeName) {
+                    case "jsonb":
                     case "json":
                         return `'${JSON.stringify(value).replace(/'/g, "''")}'`;
                     case "xml":
@@ -429,6 +578,12 @@ var helper = {
         let script = `\nSELECT setval(pg_get_serial_sequence('${tableName}', '${sequence.attname}'), max("${sequence.attname}"), true) FROM ${tableName};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} sequence
+     * @param {String} property
+     * @param {Number} value
+     */
     generateChangeSequencePropertyScript(sequence, property, value) {
         var definition = "";
         switch (property) {
@@ -458,6 +613,12 @@ var helper = {
         let script = `\nALTER SEQUENCE IF EXISTS ${sequence} ${definition};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} sequence
+     * @param {String} role
+     * @param {Object} changes
+     */
     generateChangesSequenceRoleGrantsScript: function(sequence, role, changes) {
         let privileges = [];
 
@@ -486,6 +647,12 @@ var helper = {
 
         return script;
     },
+    /**
+     *
+     * @param {String} sequence
+     * @param {String} role
+     * @param {Object} privileges
+     */
     generateSequenceRoleGrantsScript: function(sequence, role, privileges) {
         let script = `\n${this.__generateSequenceGrantsDefinition(sequence, role, privileges).join("\n")}`;
         return script;
@@ -510,6 +677,11 @@ CREATE SEQUENCE IF NOT EXISTS ${sequence}
 
         return script;
     },
+    /**
+     *
+     * @param {String} old_name
+     * @param {String} new_name
+     */
     generateRenameSequenceScript: function(old_name, new_name) {
         let script = `\nALTER SEQUENCE IF EXISTS ${old_name} RENAME TO ${new_name};\n`;
         return script;

@@ -7,8 +7,16 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
-            "program": "${workspaceFolder}\\test\\test.js",            
+            "name": "Launch Migrate Test",
+            "program": "${workspaceFolder}\\test\\migrateTest.js",
+            "protocol": "auto",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Compare Test",
+            "program": "${workspaceFolder}\\test\\compareTest.js",
             "protocol": "auto",
             "console": "integratedTerminal"
         }
