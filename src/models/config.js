@@ -1,10 +1,12 @@
 module.exports = {
-    patchesFolder: null,
     targetClient: {
         host: "localhost",
         port: 5432,
+        /** @type {String} */
         database: null,
         user: "postgres",
+        /** @type {String} */
+        /** @type {String} */
         password: null,
         applicationName: "pg-diff-api",
     },
@@ -13,16 +15,21 @@ module.exports = {
         port: 5432,
         database: null,
         user: "postgres",
+        /** @type {String} */
         password: null,
         applicationName: "pg-diff-api",
     },
     compareOptions: {
         outputDirectory: "db_patches",
+        /** @type {String} */
+        author: null,
+        getAuthorFromGit: true,
         schemaCompare: {
             namespaces: ["public"],
             dropMissingTable: false,
             dropMissingView: false,
             dropMissingFunction: false,
+            roles: [],
         },
         dataCompare: {
             enable: true,
@@ -31,6 +38,8 @@ module.exports = {
         },
     },
     migrationOptions: {
+        /** @type {String} */
+        patchesDirectory: null,
         historyTableName: "migrations",
         historyTableSchema: "public",
     },

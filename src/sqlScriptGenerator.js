@@ -117,8 +117,9 @@ var helper = {
      *
      * @param {String} table
      * @param {Object} schema
+     * @param {import("./models/config")} config
      */
-    generateCreateTableScript: function(table, schema) {
+    generateCreateTableScript: function(table, schema, config) {
         //Generate columns script
         let columns = [];
         for (let column in schema.columns) {
@@ -147,6 +148,9 @@ var helper = {
         let privileges = [];
         privileges.push(`ALTER TABLE IF EXISTS ${table} OWNER TO ${schema.owner};\n`);
         for (let role in schema.privileges) {
+            //Include only roles needed, or all roles in case empty array!
+            if (config.compareOptions.schemaCompare.roles.length > 0 && !config.compareOptions.schemaCompare.roles.includes(role)) continue;
+
             privileges = privileges.concat(this.__generateTableGrantsDefinition(table, role, schema.privileges[role]));
         }
 
@@ -464,6 +468,13 @@ var helper = {
         let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {Object} fields
+     * @param {Object} filterConditions
+     * @param {Object} changes
+     */
     generateUpdateTableRecordScript: function(table, fields, filterConditions, changes) {
         let updates = [];
         for (let field in changes) {
@@ -478,7 +489,14 @@ var helper = {
         let script = `\nUPDATE ${table} SET ${updates.join(", ")} WHERE ${conditions.join(" AND ")};\n`;
         return script;
     },
-    generateInsertTableRecordScript: function(table, record, fields, isIdentityUserValuesAllowed) {
+    /**
+     *
+     * @param {String} table
+     * @param {Object} record
+     * @param {Array} fields
+     * @param {Boolean} isIdentityValuesAllowed
+     */
+    generateInsertTableRecordScript: function(table, record, fields, isIdentityValuesAllowed) {
         let fieldNames = [];
         let fieldValues = [];
         for (let field in record) {
@@ -487,11 +505,17 @@ var helper = {
         }
 
         let script = `\nINSERT INTO ${table} (${fieldNames.join(", ")}) ${
-            isIdentityUserValuesAllowed ? "" : "OVERRIDING SYSTEM VALUE"
+            isIdentityValuesAllowed ? "" : "OVERRIDING SYSTEM VALUE"
         } VALUES (${fieldValues.join(", ")});\n`;
-        if (!isIdentityUserValuesAllowed) script = `\n${hints.identityColumnDetected}` + script;
+        if (!isIdentityValuesAllowed) script = `\n${hints.identityColumnDetected}` + script;
         return script;
     },
+    /**
+     *
+     * @param {String} table
+     * @param {Array} fields
+     * @param {Object} keyFieldsMap
+     */
     generateDeleteTableRecordScript: function(table, fields, keyFieldsMap) {
         let conditions = [];
         for (let condition in keyFieldsMap) {
@@ -501,6 +525,12 @@ var helper = {
         let script = `\nDELETE FROM ${table} WHERE ${conditions.join(" AND ")};\n`;
         return script;
     },
+    /**
+     *
+     * @param {String} fieldName
+     * @param {Array} fields
+     * @param {Object} value
+     */
     __generateSqlFormattedValue: function(fieldName, fields, value) {
         if (value === undefined) throw new Error(`The field "${fieldName}" contains an "undefined" value!`);
         if (value === null) return "NULL";
@@ -574,6 +604,11 @@ var helper = {
         )})\nON CONFLICT ${conflictDefinition}\nDO UPDATE SET ${updates.join(", ")}`;
         return script;
     },
+    /**
+     *
+     * @param {String} tableName
+     * @param {Object} sequence
+     */
     generateSetSequenceValueScript(tableName, sequence) {
         let script = `\nSELECT setval(pg_get_serial_sequence('${tableName}', '${sequence.attname}'), max("${sequence.attname}"), true) FROM ${tableName};\n`;
         return script;
@@ -657,6 +692,11 @@ var helper = {
         let script = `\n${this.__generateSequenceGrantsDefinition(sequence, role, privileges).join("\n")}`;
         return script;
     },
+    /**
+     *
+     * @param {String} sequence
+     * @param {Object} schema
+     */
     generateCreateSequenceScript: function(sequence, schema) {
         //Generate privileges script
         let privileges = [];

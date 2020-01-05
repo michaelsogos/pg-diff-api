@@ -10,6 +10,7 @@ class MigrationApi {
      *
      * @param {import("../models/config")} config
      * @param {Boolean} force
+     * @returns {Promise<import("../models/patchInfo")[]>}
      */
     static async migrate(config, force) {
         let migrationConfig = core.prepareMigrationConfig(config);
@@ -24,6 +25,7 @@ class MigrationApi {
                 return file.match(/.*\.(sql)/gi);
             });
 
+        /** @type {import("../models/patchInfo")[]} */
         let result = [];
 
         for (let index in patchesFiles) {

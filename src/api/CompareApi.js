@@ -2,23 +2,34 @@ const core = require("../core");
 const catalogApi = require("./CatalogApi");
 const DatabaseObjects = require("../models/databaseObjects");
 const sql = require("../sqlScriptGenerator");
+const TableData = require("../models/tableData");
+const deepEqual = require("deep-equal");
+const fs = require("fs");
+const path = require("path");
 
 class CompareApi {
     /**
      *
      * @param {import("../models/config")} config
+     * @param {String} scriptName
+     * @param {import("events")} eventEmitter
      */
-    static async compare(config) {
+    static async compare(config, scriptName, eventEmitter) {
+        eventEmitter.emit("compare", "Compare started", 0);
         let pgSourceClient = await core.makePgClient(config.sourceClient);
+        eventEmitter.emit("compare", "Connected to SOURCE CLIENT", 10);
         let pgTargetClient = await core.makePgClient(config.targetClient);
+        eventEmitter.emit("compare", "Connected to TARGET CLIENT", 20);
 
         let dbSourceObjects = await this.collectSchemaObjects(pgSourceClient, config.compareOptions.schemaCompare.namespaces);
+        eventEmitter.emit("compare", "Collected SOURCE objects", 30);
         let dbTargetObjects = await this.collectSchemaObjects(pgTargetClient, config.compareOptions.schemaCompare.namespaces);
+        eventEmitter.emit("compare", "Collected TARGET objects", 40);
 
         let droppedConstraints = [];
         let droppedIndexes = [];
         let droppedViews = [];
-        let addedColumns = [];
+        let addedColumns = {};
 
         let scripts = this.compareDatabaseObjects(
             dbSourceObjects,
@@ -28,37 +39,19 @@ class CompareApi {
             droppedViews,
             addedColumns,
             config,
+            eventEmitter,
         );
 
         if (config.compareOptions.dataCompare.enable) {
-            let dataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
-
-            let sourceTablesRecords = await data.collectTablesRecords(sourceClient, global.config.options.dataCompare.tables);
-
-            log();
-            log();
-            log(chalk.yellow("Collect TARGET tables records"));
-            let targetTablesRecords = await data.collectTablesRecords(targetClient, global.config.options.dataCompare.tables);
-
-            log();
-            log();
-            log(chalk.yellow("Compare SOURCE with TARGET database table records"));
-            scripts = scripts.concat(
-                compareRecords.compareTablesRecords(global.config.options.dataCompare.tables, sourceTablesRecords, targetTablesRecords),
-            );
-        } else {
-            log();
-            log();
-            log(chalk.yellow("Data compare not enabled!"));
+            scripts.push(...(await this.compareTablesRecords(config, pgSourceClient, pgTargetClient, addedColumns)));
+            eventEmitter.emit("compare", "Table records have been compared", 90);
         }
 
-        let scriptFilePath = await __saveSqlScript(scripts);
+        let scriptFilePath = await this.saveSqlScript(scripts, config, scriptName, eventEmitter);
 
-        log();
-        log();
-        log(chalk.whiteBright("SQL patch file has been created succesfully at: ") + chalk.green(scriptFilePath));
+        eventEmitter.emit("compare", "Compare completed", 100);
 
-        process.exit();
+        return scriptFilePath;
     }
 
     /**
@@ -98,20 +91,36 @@ class CompareApi {
      * @param {String[]} droppedConstraints
      * @param {String[]} droppedIndexes
      * @param {String[]} droppedViews
-     * @param {Array} addedColumns
+     * @param {Object} addedColumns
      * @param {import("../models/config")} config
+     * @param {import("events")} eventEmitter
      */
-    static compareDatabaseObjects(dbSourceObjects, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, config) {
+    static compareDatabaseObjects(
+        dbSourceObjects,
+        dbTargetObjects,
+        droppedConstraints,
+        droppedIndexes,
+        droppedViews,
+        addedColumns,
+        config,
+        eventEmitter,
+    ) {
         let sqlPatch = [];
 
         sqlPatch.push(...this.compareSchemas(dbSourceObjects.schemas, dbTargetObjects.schemas));
+        eventEmitter.emit("compare", "SCHEMA objects have been compared", 45);
         sqlPatch.push(
             ...this.compareTables(dbSourceObjects.tables, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, config),
         );
+        eventEmitter.emit("compare", "TABLE objects have been compared", 50);
         sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
+        eventEmitter.emit("compare", "VIEW objects have been compared", 55);
         sqlPatch.push(...this.compareMaterializedViews(dbSourceObjects.materializedViews, dbTargetObjects.materializedViews, droppedViews, config));
+        eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 60);
         sqlPatch.push(...this.compareProcedures(dbSourceObjects.functions, dbTargetObjects.functions, config));
+        eventEmitter.emit("compare", "PROCEDURE objects have been compared", 65);
         sqlPatch.push(...this.compareSequences(dbSourceObjects.sequences, dbTargetObjects.sequences));
+        eventEmitter.emit("compare", "SEQUENCE objects have been compared", 70);
 
         return sqlPatch;
     }
@@ -149,7 +158,7 @@ class CompareApi {
                 sqlScript.push(sql.generateCreateSchemaScript(sourceSchema, sourceSchemas[sourceSchema].owner));
             }
 
-            finalizedScript.push(...this.finalizeScript(`CREATE SCHEMA ${schema}`, sqlScript));
+            finalizedScript.push(...this.finalizeScript(`CREATE SCHEMA ${sourceSchema}`, sqlScript));
         }
 
         return finalizedScript;
@@ -162,7 +171,7 @@ class CompareApi {
      * @param {String[]} droppedConstraints
      * @param {String[]} droppedIndexes
      * @param {String[]} droppedViews
-     * @param {Array} addedColumns
+     * @param {Object} addedColumns
      * @param {import("../models/config")} config
      */
     static compareTables(sourceTables, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, config) {
@@ -176,7 +185,9 @@ class CompareApi {
                 //Table exists on both database, then compare table schema
                 actionLabel = "ALTER";
 
-                sqlScript.push(this.compareTableOptions(sourceTable, sourceTables[sourceTable].options, targetTables[sourceTable].options));
+                sqlScript.push(
+                    ...this.compareTableOptions(sourceTable, sourceTables[sourceTable].options, dbTargetObjects.tables[sourceTable].options),
+                );
                 sqlScript.push(
                     ...this.compareTableColumns(
                         sourceTable,
@@ -200,7 +211,12 @@ class CompareApi {
                     ...this.compareTableIndexes(sourceTables[sourceTable].indexes, dbTargetObjects.tables[sourceTable].indexes, droppedIndexes),
                 );
                 sqlScript.push(
-                    ...this.compareTablePrivileges(sourceTable, sourceTables[sourceTable].privileges, dbTargetObjects.tables[sourceTable].privileges),
+                    ...this.compareTablePrivileges(
+                        sourceTable,
+                        sourceTables[sourceTable].privileges,
+                        dbTargetObjects.tables[sourceTable].privileges,
+                        config,
+                    ),
                 );
 
                 if (sourceTables[sourceTable].owner != dbTargetObjects.tables[sourceTable].owner)
@@ -209,7 +225,7 @@ class CompareApi {
                 //Table not exists on target database, then generate the script to create table
                 actionLabel = "CREATE";
 
-                sqlScript.push(sql.generateCreateTableScript(sourceTable, sourceTables[sourceTable]));
+                sqlScript.push(sql.generateCreateTableScript(sourceTable, sourceTables[sourceTable], config));
             }
 
             finalizedScript.push(...this.finalizeScript(`${actionLabel} TABLE ${sourceTable}`, sqlScript));
@@ -234,8 +250,8 @@ class CompareApi {
      * @param {Object} targetTableOptions
      */
     static compareTableOptions(tableName, sourceTableOptions, targetTableOptions) {
-        if (sourceTableOptions.withOids != targetTableOptions.withOids) return sql.generateChangeTableOptionsScript(tableName, sourceTableOptions);
-        else return "";
+        if (sourceTableOptions.withOids != targetTableOptions.withOids) return [sql.generateChangeTableOptionsScript(tableName, sourceTableOptions)];
+        else return [];
     }
 
     /**
@@ -250,10 +266,9 @@ class CompareApi {
      */
     static compareTableColumns(tableName, sourceTableColumns, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns) {
         let sqlScript = [];
+        let targetTable = dbTargetObjects.tables[tableName];
 
         for (let sourceTableColumn in sourceTableColumns) {
-            let targetTable = dbTargetObjects.tables[tableName];
-
             if (targetTable.columns[sourceTableColumn]) {
                 //Table column exists on both database, then compare column schema
                 sqlScript.push(
@@ -270,9 +285,9 @@ class CompareApi {
             } else {
                 //Table column not exists on target database, then generate script to add column
                 sqlScript.push(sql.generateAddTableColumnScript(tableName, sourceTableColumn, sourceTableColumns[column]));
-                if (!addedColumns[table]) addedColumns[table] = [];
+                if (!addedColumns[tableName]) addedColumns[tableName] = [];
 
-                addedColumns[table].push(sourceTableColumn);
+                addedColumns[tableName].push(sourceTableColumn);
             }
         }
 
@@ -471,11 +486,15 @@ class CompareApi {
      * @param {String} tableName
      * @param {Object} sourceTablePrivileges
      * @param {Object} targetTablePrivileges
+     * @param {import("../models/config")} config
      */
-    static compareTablePrivileges(tableName, sourceTablePrivileges, targetTablePrivileges) {
+    static compareTablePrivileges(tableName, sourceTablePrivileges, targetTablePrivileges, config) {
         let sqlScript = [];
 
         for (let role in sourceTablePrivileges) {
+            // In case a list of specific roles hve been configured, the check will only contains those roles eventually.
+            if (config.compareOptions.schemaCompare.roles.length > 0 && !config.compareOptions.schemaCompare.roles.includes(role)) continue;
+
             //Get new or changed role privileges
             if (targetTablePrivileges[role]) {
                 //Table privileges for role exists on both database, then compare privileges
@@ -533,7 +552,7 @@ class CompareApi {
                         //It will recreate a dropped view because changes happens on involved columns
                         sqlScript.push(sql.generateCreateViewScript(view, sourceViews[view]));
 
-                    sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges));
+                    sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges), config);
                     if (sourceViews[view].owner != targetViews[view].owner)
                         sqlScript.push(sql.generateChangeTableOwnerScript(view, sourceViews[view].owner));
                 }
@@ -592,7 +611,12 @@ class CompareApi {
                     );
 
                     sqlScript.push(
-                        ...this.compareTablePrivileges(view, sourceMaterializedViews[view].privileges, targetMaterializedViews[view].privileges),
+                        ...this.compareTablePrivileges(
+                            view,
+                            sourceMaterializedViews[view].privileges,
+                            targetMaterializedViews[view].privileges,
+                            config,
+                        ),
                     );
 
                     if (sourceMaterializedViews[view].owner != targetMaterializedViews[view].owner)
@@ -826,6 +850,371 @@ class CompareApi {
         }
 
         return sqlScript;
+    }
+
+    /**
+     *
+     * @param {import("../models/config")} config
+     * @param {import("pg").Client} sourceClient
+     * @param {import("pg").Client} targetClient
+     * @param {Object} addedColumns
+     */
+    static async compareTablesRecords(config, sourceClient, targetClient, addedColumns) {
+        let finalizedScript = [];
+
+        for (let tableDefinition of config.compareOptions.dataCompare.tables) {
+            let sqlScript = [];
+
+            if (!(await this.checkIfTableExists(sourceClient, tableDefinition))) {
+                sqlScript.push(
+                    `\n--ERROR: Table "${tableDefinition.tableSchema || "public"}"."${
+                        tableDefinition.tableName
+                    }" not found on SOURCE database for comparison!\n`,
+                );
+                continue;
+            }
+
+            if (!(await this.checkIfTableExists(targetClient, tableDefinition))) {
+                sqlScript.push(
+                    `\n--ERROR: Table "${tableDefinition.tableSchema || "public"}"."${
+                        tableDefinition.tableName
+                    }" not found on TARGET database for comparison!\n`,
+                );
+                continue;
+            }
+
+            let tableData = new TableData();
+            tableData.sourceData.records = await this.collectTableRecords(sourceClient, tableDefinition);
+            tableData.sourceData.sequences = await this.collectTableSequences(sourceClient, tableDefinition);
+            tableData.targetData.records = await this.collectTableRecords(targetClient, tableDefinition);
+            tableData.targetData.sequences = await this.collectTableSequences(targetClient, tableDefinition);
+
+            let compareResult = this.compareTableRecords(tableDefinition, tableData, addedColumns);
+            sqlScript.push(...compareResult.sqlScript);
+
+            if (compareResult.isSequenceRebaseNeeded) sqlScript.push(...this.rebaseSequences(tableDefinition, tableData));
+
+            finalizedScript.push(
+                ...this.finalizeScript(
+                    `SYNCHRONIZE TABLE "${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}" RECORDS`,
+                    sqlScript,
+                ),
+            );
+        }
+
+        return finalizedScript;
+    }
+
+    /**
+     *
+     * @param {import("pg").Client} client
+     * @param {import("../models/tableDefinition")} tableDefinition
+     * @returns {Promise<Boolean>}
+     */
+    static async checkIfTableExists(client, tableDefinition) {
+        let response = await client.query(
+            `SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = '${
+                tableDefinition.tableName
+            }' AND schemaname = '${tableDefinition.tableSchema || "public"}')`,
+        );
+
+        return response.rows[0].exists;
+    }
+
+    /**
+     *
+     * @param {import("pg").Client} client
+     * @param {import("../models/tableDefinition")} tableDefinition
+     */
+    static async collectTableRecords(client, tableDefinition) {
+        let result = {
+            fields: null,
+            rows: null,
+        };
+        let response = await client.query(
+            `SELECT MD5(ROW(${tableDefinition.tableKeyFields.join(",")})::text) AS "rowHash", * FROM "${tableDefinition.tableSchema || "public"}"."${
+                tableDefinition.tableName
+            }"`,
+        );
+        result.fields = response.fields;
+        result.rows = response.rows;
+
+        return result;
+    }
+
+    /**
+     *
+     * @param {import("pg").Client} client
+     * @param {import("../models/tableDefinition")} tableDefinition
+     */
+    static async collectTableSequences(client, tableDefinition) {
+        let identityFeature = `
+        CASE 
+            WHEN COALESCE(a.attidentity,'') = '' THEN 'SERIAL'
+            WHEN a.attidentity = 'a' THEN 'ALWAYS'
+            WHEN a.attidentity = 'd' THEN 'BY DEFAULT'
+        END AS identitytype`;
+
+        let response = await client.query(`
+            SELECT * FROM (
+                SELECT 
+                    pg_get_serial_sequence(a.attrelid::regclass::name, a.attname) AS seqname,
+                    a.attname,
+                    ${client.version.major >= 10 ? identityFeature : "'SERIAL' AS identitytype"}
+                FROM pg_attribute a
+                WHERE a.attrelid = '"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"'::regclass
+                AND a.attnum > 0
+                AND a.attisdropped = false
+            ) T WHERE T.seqname IS NOT NULL`);
+
+        return response.rows;
+    }
+
+    /**
+     *
+     * @param {import("../models/tableDefinition")} tableDefinition
+     * @param {import("../models/tableData")} tableData
+     * @param {Object} addedColumns
+     */
+    static compareTableRecords(tableDefinition, tableData, addedColumns) {
+        let ignoredRowHash = [];
+        let result = {
+            /** @type {String[]} */
+            sqlScript: [],
+            isSequenceRebaseNeeded: false,
+        };
+        let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
+
+        //Check if at least one sequence is for an ALWAYS IDENTITY in case the OVERRIDING SYSTEM VALUE must be issued
+        let isIdentityValuesAllowed = !tableData.targetData.sequences.some(sequence => sequence.identitytype === "ALWAYS");
+
+        tableData.sourceData.records.rows.forEach((record, index) => {
+            //Check if row hash has been ignored because duplicated or already processed from source
+            if (ignoredRowHash.some(hash => hash === record.rowHash)) return;
+
+            let keyFieldsMap = this.getKeyFieldsMap(tableDefinition.tableKeyFields, record);
+
+            //Check if record is duplicated in source
+            if (tableData.sourceData.records.rows.some((r, idx) => r.rowHash === record.rowHash && idx > index)) {
+                ignoredRowHash.push(record.rowHash);
+                result.sqlScript.push(
+                    `\n--ERROR: Too many record found in SOURCE database for table ${fullTableName} and key fields ${JSON.stringify(
+                        keyFieldsMap,
+                    )} !\n`,
+                );
+                return;
+            }
+
+            //Check if record is duplicated in target
+            let targetRecord = [];
+            targetRecord = tableData.targetData.records.rows.filter(function(r) {
+                return r.rowHash === record.rowHash;
+            });
+
+            if (targetRecord.length > 1) {
+                ignoredRowHash.push(record.rowHash);
+                result.sqlScript.push(
+                    `\n--ERROR: Too many record found in TARGET database for table ${fullTableName} and key fields ${JSON.stringify(
+                        keyFieldsMap,
+                    )} !\n`,
+                );
+                return;
+            }
+
+            ignoredRowHash.push(record.rowHash);
+
+            //Generate sql script to add\update record in target database table
+            if (targetRecord.length <= 0) {
+                //A record with same KEY FIELDS not exists, then create a new record
+                delete record.rowHash; //Remove property from "record" object in order to not add it on sql script
+                result.sqlScript.push(
+                    sql.generateInsertTableRecordScript(fullTableName, record, tableData.sourceData.records.fields, isIdentityValuesAllowed),
+                );
+                result.isSequenceRebaseNeeded = true;
+            } else {
+                //A record with same KEY FIELDS VALUES has been found, then update not matching fieds only
+                let fieldCompareResult = this.compareTableRecordFields(
+                    table,
+                    keyFieldsMap,
+                    sourceTableRecords.records.fields,
+                    record,
+                    targetRecord[0],
+                    addedColumns,
+                );
+                if (fieldCompareResult.isSequenceRebaseNeeded) result.isSequenceRebaseNeeded = true;
+                result.sqlScript.push(...fieldCompareResult.sqlScript);
+            }
+        });
+
+        tableData.targetData.records.rows.forEach((record, index) => {
+            //Check if row hash has been ignored because duplicated or already processed from source
+            if (ignoredRowHash.some(hash => hash === record.rowHash)) return;
+
+            let keyFieldsMap = this.getKeyFieldsMap(tableDefinition.tableKeyFields, record);
+
+            if (tableData.targetData.records.rows.some((r, idx) => r.rowHash === record.rowHash && idx > index)) {
+                ignoredRowHash.push(record.rowHash);
+                result.sqlScript.push(
+                    `\n--ERROR: Too many record found in TARGET database for table ${fullTableName} and key fields ${JSON.stringify(
+                        keyFieldsMap,
+                    )} !\n`,
+                );
+                return;
+            }
+
+            //Generate sql script to delete record because not exists on source database table
+            result.sqlScript.push(sql.generateDeleteTableRecordScript(table, sourceTableRecords.records.fields, keyFieldsMap));
+            result.isSequenceRebaseNeeded = true;
+        });
+
+        return result;
+    }
+
+    /**
+     *
+     * @param {String[]} keyFields
+     * @param {Object} record
+     */
+    static getKeyFieldsMap(keyFields, record) {
+        let keyFieldsMap = {};
+        keyFields.forEach((item, index) => {
+            keyFieldsMap[item] = record[item];
+        });
+        return keyFieldsMap;
+    }
+
+    /**
+     *
+     * @param {String} table
+     * @param {Object} keyFieldsMap
+     * @param {Array} fields
+     * @param {Object} sourceRecord
+     * @param {Object} targetRecord
+     * @param {Object} addedColumns
+     */
+    static compareTableRecordFields(table, keyFieldsMap, fields, sourceRecord, targetRecord, addedColumns) {
+        let changes = {};
+        let result = {
+            /** @type {String[]} */
+            sqlScript: [],
+            isSequenceRebaseNeeded: false,
+        };
+
+        for (field in sourceRecord) {
+            if (field === "rowHash") continue;
+
+            if (targetRecord[field] === undefined && this.checkIsNewColumn(addedColumns, table, field)) {
+                changes[field] = sourceRecord[field];
+            } else if (this.compareFieldValues(sourceRecord[field], targetRecord[field])) {
+                changes[field] = sourceRecord[field];
+            }
+        }
+
+        if (Object.keys(changes).length > 0) {
+            result.isSequenceRebaseNeeded = true;
+            result.sqlScript.push(sql.generateUpdateTableRecordScript(table, fields, keyFieldsMap, changes));
+        }
+
+        return result;
+    }
+
+    /**
+     *
+     * @param {Object} addedColumns
+     * @param {String} table
+     * @param {String} field
+     */
+    static checkIsNewColumn(addedColumns, table, field) {
+        if (
+            addedColumns[table] &&
+            addedColumns[table].some(column => {
+                return column == field;
+            })
+        )
+            return true;
+        else return false;
+    }
+
+    /**
+     *
+     * @param {Object} sourceValue
+     * @param {Object} targetValue
+     */
+    static compareFieldValues(sourceValue, targetValue) {
+        var sourceValueType = typeof sourceValue;
+        var targetValueType = typeof targetValue;
+
+        if (sourceValueType != targetValueType) return false;
+        else if (sourceValue instanceof Date) return sourceValue.getTime() !== targetValue.getTime();
+        else if (sourceValue instanceof Object) return !deepEqual(sourceValue, targetValue);
+        else return sourceValue !== targetValue;
+    }
+
+    /**
+     *
+     * @param {import("../models/tableDefinition")} tableDefinition
+     * @param {import("../models/tableData")} tableData
+     */
+    static rebaseSequences(tableDefinition, tableData) {
+        let sqlScript = [];
+        let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
+
+        tableData.sourceData.sequences.forEach(sequence => {
+            sqlScript.push(sql.generateSetSequenceValueScript(fullTableName, sequence));
+        });
+
+        return sqlScript;
+    }
+
+    /**
+     *
+     * @param {String[]} scriptLines
+     * @param {import("../models/config")} config
+     * @param {import("events")} eventEmitter
+     * @returns {String}
+     */
+    static async saveSqlScript(scriptLines, config, scriptName, eventEmitter) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (scriptLines.length <= 0) resolve(null);
+                else {
+                    const now = new Date();
+                    const fileName = `${now.toISOString().replace(/[-:\.TZ]/g, "")}_${scriptName}.sql`;
+                    const scriptPath = path.resolve(process.cwd(), config.compareOptions.outputDirectory, fileName);
+
+                    var file = fs.createWriteStream(scriptPath);
+
+                    file.on("error", reject);
+
+                    file.on("finish", () => {
+                        eventEmitter.emit("compare", "Patch file have been created", 95);
+                        resolve(scriptPath);
+                    });
+
+                    if (config.compareOptions.getAuthorFromGit) {
+                        config.compareOptions.author = await core.getGitAuthor();
+                    }
+
+                    let titleLength =
+                        config.compareOptions.author.length > now.toISOString().length
+                            ? config.compareOptions.author.length
+                            : now.toISOString().length;
+
+                    file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
+                    file.write(`/*** SCRIPT AUTHOR: ${config.compareOptions.author.padEnd(titleLength)} ***/\n`);
+                    file.write(`/***    CREATED ON: ${now.toISOString().padEnd(titleLength)} ***/\n`);
+                    file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
+
+                    scriptLines.forEach(function(line) {
+                        file.write(line);
+                    });
+
+                    file.end();
+                }
+            } catch (err) {
+                reject(err);
+            }
+        });
     }
 }
 

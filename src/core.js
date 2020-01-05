@@ -11,9 +11,12 @@ class core {
      * @param {import("./models/config")} config
      */
     static prepareMigrationConfig(config) {
-        if (!config.patchesFolder) throw new Error('Missing configuration property "patchesFolder"!');
+        if (!config.migrationOptions.patchesDirectory) throw new Error('Missing configuration property "patchesFolder"!');
+
         return {
-            patchesFolder: path.isAbsolute(config.patchesFolder) ? config.patchesFolder : path.resolve(process.cwd(), config.patchesFolder),
+            patchesFolder: path.isAbsolute(config.migrationOptions.patchesDirectory)
+                ? config.migrationOptions.patchesDirectory
+                : path.resolve(process.cwd(), config.migrationOptions.patchesDirectory),
             migrationHistory: {
                 tableName: config.migrationOptions.historyTableName,
                 tableSchema: config.migrationOptions.historyTableSchema,
@@ -54,10 +57,16 @@ class core {
 
         migrationHistoryTableSchema.owner = config.migrationHistory.tableOwner;
 
-        let sqlScript = sql.generateCreateTableScript(config.migrationHistory.tableName, migrationHistoryTableSchema);
+        let sqlScript = sql.generateCreateTableScript(config.migrationHistory.tableName, migrationHistoryTableSchema, config);
         await pgClient.query(sqlScript);
     }
 
+    /**
+     *
+     * @param {String} filename
+     * @param {String} filepath
+     * @returns {import("./models/patchInfo")}
+     */
     static getPatchFileInfo(filename, filepath) {
         let indexOfSeparator = filename.indexOf("_");
         let version = filename.substring(0, indexOfSeparator);
@@ -70,6 +79,8 @@ class core {
     }
 
     static async makePgClient(config) {
+        if (!config.database) throw new Error(`The client config parameter [database] cannot be empty! `);
+
         let client = new pg.Client({
             user: config.user,
             host: config.host,
@@ -109,8 +120,80 @@ class core {
      * @returns {Boolean}
      */
     static checkServerCompatibility(serverVersion, majorVersion, minorVersion) {
-        if (serverVersion != null && serverVersion.major >= majorVersion && client.version.minor >= minorVersion) return true;
+        if (serverVersion != null && serverVersion.major >= majorVersion && serverVersion.minor >= minorVersion) return true;
         else return false;
+    }
+
+    /**
+     * Retrive GIT CONFIG for USER NAME and USER EMAIL, repository first or fallback to global config
+     * @returns {String}
+     */
+    static async getGitAuthor() {
+        const util = require("util");
+        const exec = util.promisify(require("child_process").exec);
+        const childProcess = require("child_process");
+
+        async function getLocalAuthorName() {
+            let result = null;
+
+            try {
+                const { stdout, stderr } = await exec("git config --local user.name");
+                result = stdout.trim();
+            } catch (err) {
+                result = err.stdout.trim();
+            }
+
+            return result;
+        }
+        async function getLocalAuthorEmail() {
+            let result = null;
+
+            try {
+                const { stdout, stderr } = await exec("git config --local user.email");
+                result = stdout.trim();
+            } catch (err) {
+                result = err.stdout.trim();
+            }
+
+            return result;
+        }
+        async function getGlobalAuthorName() {
+            let result = null;
+
+            try {
+                const { stdout, stderr } = await exec("git config --global user.name");
+                result = stdout.trim();
+            } catch (err) {
+                result = err.stdout.trim();
+            }
+
+            return result;
+        }
+        async function getGlobalAuthorEmail() {
+            let result = null;
+
+            try {
+                const { stdout, stderr } = await exec("git config --global user.email");
+                result = stdout.trim();
+            } catch (err) {
+                result = err.stdout.trim();
+            }
+
+            return result;
+        }
+
+        let authorName = await getLocalAuthorName();
+        let authorEmail = await getLocalAuthorEmail();
+
+        if (!authorName) {
+            //GIT LOCAL didn't return anything! Try GIT GLOBAL.
+
+            authorName = await getGlobalAuthorName();
+            authorEmail = await getGlobalAuthorEmail();
+        }
+
+        if (authorEmail) return `${authorName} (${authorEmail})`;
+        else return authorName;
     }
 }
 
