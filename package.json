@@ -1,0 +1,48 @@
+{
+    "name": "pg-diff-api",
+    "version": "1.0.1",
+    "description": "PostgreSQL migration strategy for NodeJS",
+    "pgver": "9.6+",
+    "main": "index.js",
+    "directories": {
+        "test": "test"
+    },
+    "scripts": {
+        "test-compare": "node ./test/compareTest.js",
+        "test-migration": "node ./test/migrationTest.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/michaelsogos/pg-diff-api.git"
+    },
+    "keywords": [
+        "pg",
+        "pg-diff",
+        "postgre",
+        "postgresql",
+        "sql",
+        "diff",
+        "api",
+        "pgsql",
+        "schema",
+        "data",
+        "compare",
+        "tool"
+    ],
+    "author": "Michael Sogos",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/michaelsogos/pg-diff-api/issues",
+        "email": "michael.sogos@gurustudioweb.it"
+    },
+    "homepage": "https://github.com/michaelsogos/pg-diff-api#readme",
+    "engines": {
+        "node": ">=8.11.1"
+    },
+    "devDependencies": {},
+    "dependencies": {
+        "deep-equal": "^2.0.1",
+        "line-by-line": "^0.1.6",
+        "pg": "^7.12.0"
+    }
+}
