@@ -148,9 +148,6 @@ var helper = {
         let privileges = [];
         privileges.push(`ALTER TABLE IF EXISTS ${table} OWNER TO ${schema.owner};\n`);
         for (let role in schema.privileges) {
-            //Include only roles needed, or all roles in case empty array!
-            if (config.compareOptions.schemaCompare.roles.length > 0 && !config.compareOptions.schemaCompare.roles.includes(role)) continue;
-
             privileges = privileges.concat(this.__generateTableGrantsDefinition(table, role, schema.privileges[role]));
         }
 
@@ -543,7 +540,7 @@ var helper = {
         });
 
         if (dataTypeIndex >= 0) {
-            dataTypeName = fields[dataTypeIndex].dataTypeName;
+            dataTypeName = fields[dataTypeIndex].datatype;
             dataTypeCategory = fields[dataTypeIndex].dataTypeCategory;
         }
 

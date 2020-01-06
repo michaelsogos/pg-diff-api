@@ -46,7 +46,8 @@ const query = {
                 FROM pg_attribute a
                 INNER JOIN pg_type t ON t.oid = a.atttypid
                 LEFT JOIN pg_attrdef ad on ad.adrelid = a.attrelid AND a.attnum = ad.adnum
-                WHERE attrelid = '${tableName}'::regclass AND attnum > 0 AND attisdropped = false`;
+                WHERE attrelid = '${tableName}'::regclass AND attnum > 0 AND attisdropped = false
+                ORDER BY a.attnum ASC`;
     },
     /**
      *
@@ -245,12 +246,12 @@ class CatalogApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      */
-    static async retrieveTables(client, schemas) {
+    static async retrieveTables(client, config) {
         let result = {};
 
-        const tables = await client.query(query.getTables(schemas));
+        const tables = await client.query(query.getTables(config.compareOptions.schemaCompare.namespaces));
 
         await Promise.all(
             tables.rows.map(async table => {
@@ -325,15 +326,19 @@ class CatalogApi {
 
                 let privileges = await client.query(query.getTablePrivileges(table.schemaname, table.tablename));
                 privileges.rows.forEach(privilege => {
-                    result[fullTableName].privileges[privilege.usename] = {
-                        select: privilege.select,
-                        insert: privilege.insert,
-                        update: privilege.update,
-                        delete: privilege.delete,
-                        truncate: privilege.truncate,
-                        references: privilege.references,
-                        trigger: privilege.trigger,
-                    };
+                    if (
+                        config.compareOptions.schemaCompare.roles.length <= 0 ||
+                        config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+                    )
+                        result[fullTableName].privileges[privilege.usename] = {
+                            select: privilege.select,
+                            insert: privilege.insert,
+                            update: privilege.update,
+                            delete: privilege.delete,
+                            truncate: privilege.truncate,
+                            references: privilege.references,
+                            trigger: privilege.trigger,
+                        };
                 });
 
                 //TODO: Missing discovering of PARTITION
@@ -349,13 +354,13 @@ class CatalogApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      */
-    static async retrieveViews(client, schemas) {
+    static async retrieveViews(client, config) {
         let result = {};
 
         //Get views
-        const views = await client.query(query.getViews(schemas));
+        const views = await client.query(query.getViews(config.compareOptions.schemaCompare.namespaces));
 
         await Promise.all(
             views.rows.map(async view => {
@@ -369,15 +374,19 @@ class CatalogApi {
 
                 let privileges = await client.query(query.getViewPrivileges(view.schemaname, view.viewname));
                 privileges.rows.forEach(privilege => {
-                    result[fullViewName].privileges[privilege.usename] = {
-                        select: privilege.select,
-                        insert: privilege.insert,
-                        update: privilege.update,
-                        delete: privilege.delete,
-                        truncate: privilege.truncate,
-                        references: privilege.references,
-                        trigger: privilege.trigger,
-                    };
+                    if (
+                        config.compareOptions.schemaCompare.roles.length <= 0 ||
+                        config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+                    )
+                        result[fullViewName].privileges[privilege.usename] = {
+                            select: privilege.select,
+                            insert: privilege.insert,
+                            update: privilege.update,
+                            delete: privilege.delete,
+                            truncate: privilege.truncate,
+                            references: privilege.references,
+                            trigger: privilege.trigger,
+                        };
                 });
 
                 let dependencies = await client.query(query.getViewDependencies(view.schemaname, view.viewname));
@@ -401,12 +410,12 @@ class CatalogApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      */
-    static async retrieveMaterializedViews(client, schemas) {
+    static async retrieveMaterializedViews(client, config) {
         let result = {};
 
-        const views = await client.query(query.getMaterializedViews(schemas));
+        const views = await client.query(query.getMaterializedViews(config.compareOptions.schemaCompare.namespaces));
 
         await Promise.all(
             views.rows.map(async view => {
@@ -428,15 +437,19 @@ class CatalogApi {
 
                 let privileges = await client.query(query.getMaterializedViewPrivileges(view.schemaname, view.matviewname));
                 privileges.rows.forEach(privilege => {
-                    result[fullViewName].privileges[privilege.usename] = {
-                        select: privilege.select,
-                        insert: privilege.insert,
-                        update: privilege.update,
-                        delete: privilege.delete,
-                        truncate: privilege.truncate,
-                        references: privilege.references,
-                        trigger: privilege.trigger,
-                    };
+                    if (
+                        config.compareOptions.schemaCompare.roles.length <= 0 ||
+                        config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+                    )
+                        result[fullViewName].privileges[privilege.usename] = {
+                            select: privilege.select,
+                            insert: privilege.insert,
+                            update: privilege.update,
+                            delete: privilege.delete,
+                            truncate: privilege.truncate,
+                            references: privilege.references,
+                            trigger: privilege.trigger,
+                        };
                 });
 
                 let dependencies = await client.query(query.getViewDependencies(view.schemaname, view.matviewname));
@@ -458,12 +471,12 @@ class CatalogApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      */
-    static async retrieveFunctions(client, schemas) {
+    static async retrieveFunctions(client, config) {
         let result = {};
 
-        const procedures = await client.query(query.getFunctions(schemas));
+        const procedures = await client.query(query.getFunctions(config.compareOptions.schemaCompare.namespaces));
 
         await Promise.all(
             procedures.rows.map(async procedure => {
@@ -478,9 +491,13 @@ class CatalogApi {
                 let privileges = await client.query(query.getFunctionPrivileges(procedure.nspname, procedure.proname, procedure.argtypes));
 
                 privileges.rows.forEach(privilege => {
-                    result[fullProcedureName].privileges[privilege.usename] = {
-                        execute: privilege.execute,
-                    };
+                    if (
+                        config.compareOptions.schemaCompare.roles.length <= 0 ||
+                        config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+                    )
+                        result[fullProcedureName].privileges[privilege.usename] = {
+                            execute: privilege.execute,
+                        };
                 });
             }),
         );
@@ -491,12 +508,12 @@ class CatalogApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      */
-    static async retrieveSequences(client, schemas) {
+    static async retrieveSequences(client, config) {
         let result = {};
 
-        const sequences = await client.query(query.getSequences(schemas, client.version));
+        const sequences = await client.query(query.getSequences(config.compareOptions.schemaCompare.namespaces, client.version));
 
         await Promise.all(
             sequences.rows.map(async sequence => {
@@ -519,11 +536,15 @@ class CatalogApi {
                 privileges.rows.forEach(privilege => {
                     if (privilege.cache_value != null) result[fullSequenceName].cacheSize = privilege.cache_value;
 
-                    result[fullSequenceName].privileges[privilege.usename] = {
-                        select: privilege.select,
-                        usage: privilege.usage,
-                        update: privilege.update,
-                    };
+                    if (
+                        config.compareOptions.schemaCompare.roles.length <= 0 ||
+                        config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+                    )
+                        result[fullSequenceName].privileges[privilege.usename] = {
+                            select: privilege.select,
+                            usage: privilege.usage,
+                            update: privilege.update,
+                        };
                 });
             }),
         );

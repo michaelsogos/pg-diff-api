@@ -21,15 +21,16 @@ class CompareApi {
         let pgTargetClient = await core.makePgClient(config.targetClient);
         eventEmitter.emit("compare", "Connected to TARGET CLIENT", 20);
 
-        let dbSourceObjects = await this.collectSchemaObjects(pgSourceClient, config.compareOptions.schemaCompare.namespaces);
+        let dbSourceObjects = await this.collectSchemaObjects(pgSourceClient, config);
         eventEmitter.emit("compare", "Collected SOURCE objects", 30);
-        let dbTargetObjects = await this.collectSchemaObjects(pgTargetClient, config.compareOptions.schemaCompare.namespaces);
+        let dbTargetObjects = await this.collectSchemaObjects(pgTargetClient, config);
         eventEmitter.emit("compare", "Collected TARGET objects", 40);
 
         let droppedConstraints = [];
         let droppedIndexes = [];
         let droppedViews = [];
         let addedColumns = {};
+        let addedTables = [];
 
         let scripts = this.compareDatabaseObjects(
             dbSourceObjects,
@@ -38,12 +39,24 @@ class CompareApi {
             droppedIndexes,
             droppedViews,
             addedColumns,
+            addedTables,
             config,
             eventEmitter,
         );
 
         if (config.compareOptions.dataCompare.enable) {
-            scripts.push(...(await this.compareTablesRecords(config, pgSourceClient, pgTargetClient, addedColumns)));
+            scripts.push(
+                ...(await this.compareTablesRecords(
+                    config,
+                    pgSourceClient,
+                    pgTargetClient,
+                    addedColumns,
+                    addedTables,
+                    dbSourceObjects,
+                    dbTargetObjects,
+                    eventEmitter,
+                )),
+            );
             eventEmitter.emit("compare", "Table records have been compared", 90);
         }
 
@@ -57,20 +70,20 @@ class CompareApi {
     /**
      *
      * @param {import("pg").Client} client
-     * @param {String[]} schemas
+     * @param {import("../models/config")} config
      * @returns {Promise<import("../models/databaseObjects")>}
      */
-    static async collectSchemaObjects(client, schemas) {
+    static async collectSchemaObjects(client, config) {
         return new Promise(async (resolve, reject) => {
             try {
                 var dbObjects = new DatabaseObjects();
 
-                dbObjects.schemas = await catalogApi.retrieveSchemas(client, schemas);
-                dbObjects.tables = await catalogApi.retrieveTables(client, schemas);
-                dbObjects.views = await catalogApi.retrieveViews(client, schemas);
-                dbObjects.materializedViews = await catalogApi.retrieveMaterializedViews(client, schemas);
-                dbObjects.functions = await catalogApi.retrieveFunctions(client, schemas);
-                dbObjects.sequences = await catalogApi.retrieveSequences(client, schemas);
+                dbObjects.schemas = await catalogApi.retrieveSchemas(client, config.compareOptions.schemaCompare.namespaces);
+                dbObjects.tables = await catalogApi.retrieveTables(client, config);
+                dbObjects.views = await catalogApi.retrieveViews(client, config);
+                dbObjects.materializedViews = await catalogApi.retrieveMaterializedViews(client, config);
+                dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
+                dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
 
                 //TODO: Do we need to retrieve data types?
                 //TODO: Do we need to retrieve roles?
@@ -92,6 +105,7 @@ class CompareApi {
      * @param {String[]} droppedIndexes
      * @param {String[]} droppedViews
      * @param {Object} addedColumns
+     * @param {String[]} addedTables
      * @param {import("../models/config")} config
      * @param {import("events")} eventEmitter
      */
@@ -102,6 +116,7 @@ class CompareApi {
         droppedIndexes,
         droppedViews,
         addedColumns,
+        addedTables,
         config,
         eventEmitter,
     ) {
@@ -110,7 +125,16 @@ class CompareApi {
         sqlPatch.push(...this.compareSchemas(dbSourceObjects.schemas, dbTargetObjects.schemas));
         eventEmitter.emit("compare", "SCHEMA objects have been compared", 45);
         sqlPatch.push(
-            ...this.compareTables(dbSourceObjects.tables, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, config),
+            ...this.compareTables(
+                dbSourceObjects.tables,
+                dbTargetObjects,
+                droppedConstraints,
+                droppedIndexes,
+                droppedViews,
+                addedColumns,
+                addedTables,
+                config,
+            ),
         );
         eventEmitter.emit("compare", "TABLE objects have been compared", 50);
         sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
@@ -172,9 +196,10 @@ class CompareApi {
      * @param {String[]} droppedIndexes
      * @param {String[]} droppedViews
      * @param {Object} addedColumns
+     * @param {String[]} addedTables
      * @param {import("../models/config")} config
      */
-    static compareTables(sourceTables, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, config) {
+    static compareTables(sourceTables, dbTargetObjects, droppedConstraints, droppedIndexes, droppedViews, addedColumns, addedTables, config) {
         let finalizedScript = [];
 
         for (let sourceTable in sourceTables) {
@@ -224,7 +249,7 @@ class CompareApi {
             } else {
                 //Table not exists on target database, then generate the script to create table
                 actionLabel = "CREATE";
-
+                addedTables.push(sourceTable);
                 sqlScript.push(sql.generateCreateTableScript(sourceTable, sourceTables[sourceTable], config));
             }
 
@@ -858,47 +883,61 @@ class CompareApi {
      * @param {import("pg").Client} sourceClient
      * @param {import("pg").Client} targetClient
      * @param {Object} addedColumns
+     * @param {String[]} addedTables
+     * @param {import("../models/databaseObjects")} dbSourceObjects
+     * @param {import("../models/databaseObjects")} dbTargetObjects
+     * @param {import("events")} eventEmitter
      */
-    static async compareTablesRecords(config, sourceClient, targetClient, addedColumns) {
+    static async compareTablesRecords(config, sourceClient, targetClient, addedColumns, addedTables, dbSourceObjects, dbTargetObjects, eventEmitter) {
         let finalizedScript = [];
+        let iteratorCounter = 0;
+        let progressStepSize = Math.floor(20 / config.compareOptions.dataCompare.tables.length);
 
         for (let tableDefinition of config.compareOptions.dataCompare.tables) {
+            let differentRecords = 0;
             let sqlScript = [];
+            let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
 
             if (!(await this.checkIfTableExists(sourceClient, tableDefinition))) {
-                sqlScript.push(
-                    `\n--ERROR: Table "${tableDefinition.tableSchema || "public"}"."${
-                        tableDefinition.tableName
-                    }" not found on SOURCE database for comparison!\n`,
-                );
-                continue;
+                sqlScript.push(`\n--ERROR: Table ${fullTableName} not found on SOURCE database for comparison!\n`);
+            } else {
+                let tableData = new TableData();
+                tableData.sourceData.records = await this.collectTableRecords(sourceClient, tableDefinition, dbSourceObjects);
+                tableData.sourceData.sequences = await this.collectTableSequences(sourceClient, tableDefinition);
+
+                let isNewTable = false;
+                if (addedTables.includes(fullTableName)) isNewTable = true;
+
+                if (!isNewTable && !(await this.checkIfTableExists(targetClient, tableDefinition))) {
+                    sqlScript.push(
+                        `\n--ERROR: Table "${tableDefinition.tableSchema || "public"}"."${
+                            tableDefinition.tableName
+                        }" not found on TARGET database for comparison!\n`,
+                    );
+                } else {
+                    tableData.targetData.records = await this.collectTableRecords(targetClient, tableDefinition, dbTargetObjects, isNewTable);
+                    //  tableData.targetData.sequences = await this.collectTableSequences(targetClient, tableDefinition);
+
+                    let compareResult = this.compareTableRecords(tableDefinition, tableData, addedColumns);
+                    sqlScript.push(...compareResult.sqlScript);
+                    differentRecords = sqlScript.length;
+
+                    if (compareResult.isSequenceRebaseNeeded) sqlScript.push(...this.rebaseSequences(tableDefinition, tableData));
+                }
             }
-
-            if (!(await this.checkIfTableExists(targetClient, tableDefinition))) {
-                sqlScript.push(
-                    `\n--ERROR: Table "${tableDefinition.tableSchema || "public"}"."${
-                        tableDefinition.tableName
-                    }" not found on TARGET database for comparison!\n`,
-                );
-                continue;
-            }
-
-            let tableData = new TableData();
-            tableData.sourceData.records = await this.collectTableRecords(sourceClient, tableDefinition);
-            tableData.sourceData.sequences = await this.collectTableSequences(sourceClient, tableDefinition);
-            tableData.targetData.records = await this.collectTableRecords(targetClient, tableDefinition);
-            tableData.targetData.sequences = await this.collectTableSequences(targetClient, tableDefinition);
-
-            let compareResult = this.compareTableRecords(tableDefinition, tableData, addedColumns);
-            sqlScript.push(...compareResult.sqlScript);
-
-            if (compareResult.isSequenceRebaseNeeded) sqlScript.push(...this.rebaseSequences(tableDefinition, tableData));
-
             finalizedScript.push(
                 ...this.finalizeScript(
                     `SYNCHRONIZE TABLE "${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}" RECORDS`,
                     sqlScript,
                 ),
+            );
+
+            iteratorCounter += 1;
+
+            eventEmitter.emit(
+                "compare",
+                `Records for table ${fullTableName} have been compared with ${differentRecords} differences`,
+                70 + progressStepSize * iteratorCounter,
             );
         }
 
@@ -925,19 +964,32 @@ class CompareApi {
      *
      * @param {import("pg").Client} client
      * @param {import("../models/tableDefinition")} tableDefinition
+     * @param {import("../models/databaseObjects")} dbObjects
+     * @param {Boolean} isNewTable
      */
-    static async collectTableRecords(client, tableDefinition) {
+    static async collectTableRecords(client, tableDefinition, dbObjects, isNewTable) {
         let result = {
-            fields: null,
-            rows: null,
+            fields: [],
+            rows: [],
         };
-        let response = await client.query(
-            `SELECT MD5(ROW(${tableDefinition.tableKeyFields.join(",")})::text) AS "rowHash", * FROM "${tableDefinition.tableSchema || "public"}"."${
-                tableDefinition.tableName
-            }"`,
-        );
-        result.fields = response.fields;
-        result.rows = response.rows;
+
+        if (!isNewTable) {
+            let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
+            let response = await client.query(
+                `SELECT MD5(ROW(${tableDefinition.tableKeyFields.join(",")})::text) AS "rowHash", * FROM ${fullTableName}`,
+            );
+
+            for (const field of response.fields) {
+                if (field.name === "rowHash") continue;
+
+                let f = field;
+                f.datatype = dbObjects.tables[fullTableName].columns[`"${field.name}"`].datatype;
+                f.dataTypeCategory = dbObjects.tables[fullTableName].columns[`"${field.name}"`].dataTypeCategory;
+                result.fields.push(f);
+            }
+
+            result.rows = response.rows;
+        }
 
         return result;
     }
@@ -986,7 +1038,7 @@ class CompareApi {
         let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
 
         //Check if at least one sequence is for an ALWAYS IDENTITY in case the OVERRIDING SYSTEM VALUE must be issued
-        let isIdentityValuesAllowed = !tableData.targetData.sequences.some(sequence => sequence.identitytype === "ALWAYS");
+        let isIdentityValuesAllowed = !tableData.sourceData.sequences.some(sequence => sequence.identitytype === "ALWAYS");
 
         tableData.sourceData.records.rows.forEach((record, index) => {
             //Check if row hash has been ignored because duplicated or already processed from source
@@ -1034,9 +1086,9 @@ class CompareApi {
             } else {
                 //A record with same KEY FIELDS VALUES has been found, then update not matching fieds only
                 let fieldCompareResult = this.compareTableRecordFields(
-                    table,
+                    fullTableName,
                     keyFieldsMap,
-                    sourceTableRecords.records.fields,
+                    tableData.sourceData.records.fields,
                     record,
                     targetRecord[0],
                     addedColumns,
@@ -1100,7 +1152,7 @@ class CompareApi {
             isSequenceRebaseNeeded: false,
         };
 
-        for (field in sourceRecord) {
+        for (const field in sourceRecord) {
             if (field === "rowHash") continue;
 
             if (targetRecord[field] === undefined && this.checkIsNewColumn(addedColumns, table, field)) {

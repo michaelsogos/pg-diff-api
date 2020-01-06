@@ -29,6 +29,24 @@ class PgDiff {
         if (!scriptName) throw new Error("The script name must be specified!");
         return await compareApi.compare(this.config, scriptName, this.events);
     }
+
+    /*
+     async savePatch(config, patchFileName) {
+        let migrationConfig = core.prepareMigrationConfig(config);
+        let pgClient = await core.makePgClient(config.targetClient);
+
+        await core.prepareMigrationsHistoryTable(pgClient, migrationConfig);
+
+        let patchFilePath = path.resolve(migrationConfig.patchesFolder, patchFileName);
+
+        if (!fs.existsSync(patchFilePath)) throw new Error(`The patch file ${patchFilePath} does not exists!`);
+
+        let patchFileInfo = core.getPatchFileInfo(patchFileName, migrationConfig.patchesFolder);
+        await this.addRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
+        patchFileInfo.status = patchStatus.DONE;
+        await this.updateRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
+    }
+    */
 }
 
 module.exports.PgDiff = PgDiff;

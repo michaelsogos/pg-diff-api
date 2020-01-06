@@ -2,10 +2,10 @@ class TableDefinition {
     /**
      *
      * @param {String} tableName
-     * @param {String} tableSchema
      * @param {String[]} tableKeyFields
+     * @param {String} tableSchema
      */
-    constructor(tableName, tableSchema, tableKeyFields) {
+    constructor(tableName, tableKeyFields, tableSchema) {
         /** @type {String} */
         this.tableName = tableName;
         /** @type {String} */

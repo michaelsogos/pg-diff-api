@@ -29,6 +29,7 @@ module.exports = {
             dropMissingTable: false,
             dropMissingView: false,
             dropMissingFunction: false,
+            /** @type {String[]} */
             roles: [],
         },
         dataCompare: {

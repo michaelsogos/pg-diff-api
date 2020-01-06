@@ -67,22 +67,6 @@ class MigrationApi {
         return result;
     }
 
-    static async savePatch(config, patchFileName) {
-        let migrationConfig = core.prepareMigrationConfig(config);
-        let pgClient = await core.makePgClient(config.targetClient);
-
-        await core.prepareMigrationsHistoryTable(pgClient, migrationConfig);
-
-        let patchFilePath = path.resolve(migrationConfig.patchesFolder, patchFileName);
-
-        if (!fs.existsSync(patchFilePath)) throw new Error(`The patch file ${patchFilePath} does not exists!`);
-
-        let patchFileInfo = core.getPatchFileInfo(patchFileName, migrationConfig.patchesFolder);
-        await this.addRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-        patchFileInfo.status = patchStatus.DONE;
-        await this.updateRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-    }
-
     static async checkPatchStatus(pgClient, patchFileInfo, config) {
         let sql = `SELECT "status" FROM ${config.migrationHistory.fullTableName} WHERE "version" = '${patchFileInfo.version}' AND "name" = '${patchFileInfo.name}'`;
         let response = await pgClient.query(sql);
@@ -96,6 +80,12 @@ class MigrationApi {
         else return response.rows[0].status;
     }
 
+    /**
+     *
+     * @param {import("pg").Client} pgClient
+     * @param {import("../models/patchInfo")} patchFileInfo
+     * @param {Object} config
+     */
     static async applyPatch(pgClient, patchFileInfo, config) {
         var self = this;
         return new Promise(async (resolve, reject) => {
@@ -158,6 +148,7 @@ class MigrationApi {
                     } else {
                         patchScript.status = patchStatus.DONE;
                         patchScript.message = "";
+                        patchScript.command = "";
                     }
 
                     await self.updateRecordToHistoryTable(pgClient, patchScript, config);
@@ -177,6 +168,12 @@ class MigrationApi {
         await pgClient.query(patchScript.command);
     }
 
+    /**
+     *
+     * @param {import("pg").Client} pgClient
+     * @param {import("../models/patchInfo")} patchScript
+     * @param {Object} config
+     */
     static async updateRecordToHistoryTable(pgClient, patchScript, config) {
         let changes = {
             status: patchScript.status,
