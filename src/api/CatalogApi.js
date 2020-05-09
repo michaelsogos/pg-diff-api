@@ -31,7 +31,7 @@ const query = {
      */
     getTableColumns: function(tableName, serverVersion) {
         //TODO: Instead of using ::regclass casting, for better performance join with pg_class
-        return `SELECT a.attname, a.attnotnull, t.typname, t.oid as typeid, t.typcategory, ad.adsrc, ${
+        return `SELECT a.attname, a.attnotnull, t.typname, t.oid as typeid, t.typcategory, pg_get_expr(ad.adbin ,ad.adrelid ) as adsrc, ${
             core.checkServerCompatibility(serverVersion, 10, 0) ? "a.attidentity" : "NULL as attidentity"
         },
                 CASE 
