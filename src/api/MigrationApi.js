@@ -143,6 +143,7 @@ class MigrationApi {
 			patchScript.status = patchStatus.ERROR;
 			patchScript.message = err.toString();
 			await this.updateRecordToHistoryTable(pgClient, patchScript, config);
+			throw err;
 		}
 	}
 
