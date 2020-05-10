@@ -16,10 +16,22 @@ class CompareApi {
 	 */
 	static async compare(config, scriptName, eventEmitter) {
 		eventEmitter.emit("compare", "Compare started", 0);
+
+		eventEmitter.emit("compare", "Connecting to source database ...", 10);
 		let pgSourceClient = await core.makePgClient(config.sourceClient);
-		eventEmitter.emit("compare", "Connected to SOURCE CLIENT", 10);
+		eventEmitter.emit(
+			"compare",
+			`Connected to source PostgreSQL ${pgSourceClient.version.version} on [${config.sourceClient.host}:${config.sourceClient.port}/${config.sourceClient.database}] `,
+			11
+		);
+
+		eventEmitter.emit("compare", "Connecting to target database ...", 20);
 		let pgTargetClient = await core.makePgClient(config.targetClient);
-		eventEmitter.emit("compare", "Connected to TARGET CLIENT", 20);
+		eventEmitter.emit(
+			"compare",
+			`Connected to target PostgreSQL ${pgTargetClient.version.version} on [${config.targetClient.host}:${config.targetClient.port}/${config.targetClient.database}] `,
+			21
+		);
 
 		let dbSourceObjects = await this.collectSchemaObjects(pgSourceClient, config);
 		eventEmitter.emit("compare", "Collected SOURCE objects", 30);
@@ -74,27 +86,21 @@ class CompareApi {
 	 * @returns {Promise<import("../models/databaseObjects")>}
 	 */
 	static async collectSchemaObjects(client, config) {
-		return new Promise(async (resolve, reject) => {
-			try {
-				var dbObjects = new DatabaseObjects();
+		var dbObjects = new DatabaseObjects();
 
-				dbObjects.schemas = await catalogApi.retrieveSchemas(client, config.compareOptions.schemaCompare.namespaces);
-				dbObjects.tables = await catalogApi.retrieveTables(client, config);
-				dbObjects.views = await catalogApi.retrieveViews(client, config);
-				dbObjects.materializedViews = await catalogApi.retrieveMaterializedViews(client, config);
-				dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
-				dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
+		dbObjects.schemas = await catalogApi.retrieveSchemas(client, config.compareOptions.schemaCompare.namespaces);
+		dbObjects.tables = await catalogApi.retrieveTables(client, config);
+		dbObjects.views = await catalogApi.retrieveViews(client, config);
+		dbObjects.materializedViews = await catalogApi.retrieveMaterializedViews(client, config);
+		dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
+		dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
 
-				//TODO: Add a way to retrieve AGGREGATE and WINDOW functions
-				//TODO: Do we need to retrieve roles?
-				//TODO: Do we need to retieve special table like TEMPORARY and UNLOGGED? for sure not temporary, but UNLOGGED probably yes.
-				//TODO: Do we need to retrieve collation for both table and columns?
+		//TODO: Add a way to retrieve AGGREGATE and WINDOW functions
+		//TODO: Do we need to retrieve roles?
+		//TODO: Do we need to retieve special table like TEMPORARY and UNLOGGED? for sure not temporary, but UNLOGGED probably yes.
+		//TODO: Do we need to retrieve collation for both table and columns?
 
-				resolve(dbObjects);
-			} catch (e) {
-				reject(e);
-			}
-		});
+		return dbObjects;
 	}
 
 	/**
@@ -139,7 +145,15 @@ class CompareApi {
 		eventEmitter.emit("compare", "TABLE objects have been compared", 50);
 		sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
 		eventEmitter.emit("compare", "VIEW objects have been compared", 55);
-		sqlPatch.push(...this.compareMaterializedViews(dbSourceObjects.materializedViews, dbTargetObjects.materializedViews, droppedViews, config));
+		sqlPatch.push(
+			...this.compareMaterializedViews(
+				dbSourceObjects.materializedViews,
+				dbTargetObjects.materializedViews,
+				droppedViews,
+				droppedIndexes,
+				config
+			)
+		);
 		eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 60);
 		sqlPatch.push(...this.compareProcedures(dbSourceObjects.functions, dbTargetObjects.functions, config));
 		eventEmitter.emit("compare", "PROCEDURE objects have been compared", 65);
@@ -211,7 +225,7 @@ class CompareApi {
 				actionLabel = "ALTER";
 
 				//@mso -> relhadoids has been deprecated from PG v12.0
-				if (dbTargetObjects.tables[sourceTable].hasOwnProperty("options"))
+				if (dbTargetObjects.tables[sourceTable].options)
 					sqlScript.push(
 						...this.compareTableOptions(sourceTable, sourceTables[sourceTable].options, dbTargetObjects.tables[sourceTable].options)
 					);
@@ -266,7 +280,7 @@ class CompareApi {
 			for (let table in dbTargetObjects.tables) {
 				let sqlScript = [];
 
-				if (!sourceTables.hasOwnProperty(table)) sqlScript.push(sql.generateDropTableScript(table));
+				if (!sourceTables[table]) sqlScript.push(sql.generateDropTableScript(table));
 
 				finalizedScript.push(...this.finalizeScript(`DROP TABLE ${table}`, sqlScript));
 			}
@@ -315,7 +329,7 @@ class CompareApi {
 				);
 			} else {
 				//Table column not exists on target database, then generate script to add column
-				sqlScript.push(sql.generateAddTableColumnScript(tableName, sourceTableColumn, sourceTableColumns[column]));
+				sqlScript.push(sql.generateAddTableColumnScript(tableName, sourceTableColumn, sourceTableColumns[sourceTableColumn]));
 				if (!addedColumns[tableName]) addedColumns[tableName] = [];
 
 				addedColumns[tableName].push(sourceTableColumn);
@@ -373,7 +387,7 @@ class CompareApi {
 		if (Object.keys(changes).length > 0) {
 			let rawColumnName = columnName.substring(1).slice(0, -1);
 
-			//Check if the column is has constraint
+			//Check if the column has constraint
 			for (let constraint in targetTable.constraints) {
 				if (droppedConstraints.includes(constraint)) continue;
 
@@ -410,7 +424,7 @@ class CompareApi {
 				dbTargetObjects.views[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
 					if (fullDependencyName == tableName && dependency.columnName == columnName) {
-						sqlScript.push(sql.generateDropViewScript(index));
+						sqlScript.push(sql.generateDropViewScript(view));
 						droppedViews.push(view);
 					}
 				});
@@ -421,13 +435,13 @@ class CompareApi {
 				dbTargetObjects.materializedViews[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
 					if (fullDependencyName == tableName && dependency.columnName == columnName) {
-						sqlScript.push(sql.generateDropMaterializedViewScript(index));
+						sqlScript.push(sql.generateDropMaterializedViewScript(view));
 						droppedViews.push(view);
 					}
 				});
 			}
 
-			sqlScript.push(sql.generateChangeTableColumnScript(table, column, changes));
+			sqlScript.push(sql.generateChangeTableColumnScript(tableName, columnName, changes));
 		}
 
 		return sqlScript;
@@ -583,7 +597,7 @@ class CompareApi {
 						//It will recreate a dropped view because changes happens on involved columns
 						sqlScript.push(sql.generateCreateViewScript(view, sourceViews[view]));
 
-					sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges), config);
+					sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges, config));
 					if (sourceViews[view].owner != targetViews[view].owner)
 						sqlScript.push(sql.generateChangeTableOwnerScript(view, sourceViews[view].owner));
 				}
@@ -602,7 +616,7 @@ class CompareApi {
 				//Get missing views
 				let sqlScript = [];
 
-				if (!sourceViews.hasOwnProperty(view)) sqlScript.push(sql.generateDropViewScript(view));
+				if (!sourceViews[view]) sqlScript.push(sql.generateDropViewScript(view));
 
 				finalizedScript.push(...this.finalizeScript(`DROP VIEW ${view}`, sqlScript));
 			}
@@ -615,9 +629,10 @@ class CompareApi {
 	 * @param {Object} sourceMaterializedViews
 	 * @param {Object} targetMaterializedViews
 	 * @param {String[]} droppedViews
+	 * @param {String[]} droppedIndexes
 	 * @param {import("../models/config")} config
 	 */
-	static compareMaterializedViews(sourceMaterializedViews, targetMaterializedViews, droppedViews, config) {
+	static compareMaterializedViews(sourceMaterializedViews, targetMaterializedViews, droppedViews, droppedIndexes, config) {
 		let finalizedScript = [];
 
 		for (let view in sourceMaterializedViews) {
@@ -667,7 +682,7 @@ class CompareApi {
 			for (let view in targetMaterializedViews) {
 				let sqlScript = [];
 
-				if (!sourceMaterializedViews.hasOwnProperty(view)) sqlScript.push(sql.generateDropMaterializedViewScript(view));
+				if (!sourceMaterializedViews[view]) sqlScript.push(sql.generateDropMaterializedViewScript(view));
 
 				finalizedScript.push(...this.finalizeScript(`DROP MATERIALIZED VIEW ${view}`, sqlScript));
 			}
@@ -714,7 +729,7 @@ class CompareApi {
 				//Procedure not exists on target database, then generate the script to create procedure
 				actionLabel = "CREATE";
 
-				sqlScript.push(sql.generateCreateProcedureScript(procedure, this.__sourceSchema.functions[procedure]));
+				sqlScript.push(sql.generateCreateProcedureScript(procedure, sourceFunctions[procedure]));
 			}
 
 			finalizedScript.push(...this.finalizeScript(`${actionLabel} FUNCTION ${procedure}`, sqlScript));
@@ -724,7 +739,7 @@ class CompareApi {
 			for (let procedure in targetFunctions) {
 				let sqlScript = [];
 
-				if (!sourceFunctions.hasOwnProperty(procedure)) sqlScript.push(sql.generateDropProcedureScript(procedure));
+				if (!sourceFunctions[procedure]) sqlScript.push(sql.generateDropProcedureScript(procedure));
 
 				finalizedScript.push(...this.finalizeScript(`DROP FUNCTION ${procedure}`, sqlScript));
 			}
@@ -800,7 +815,7 @@ class CompareApi {
 				//Sequence not exists on target database, then generate the script to create sequence
 				actionLabel = "CREATE";
 
-				sqlScript.push(sql.generateCreateSequenceScript(sequence, this.__sourceSchema.sequences[sequence]));
+				sqlScript.push(sql.generateCreateSequenceScript(sequence, sourceSequences[sequence]));
 			}
 			finalizedScript.push(...this.finalizeScript(`${actionLabel} SEQUENCE ${sequence}`, sqlScript));
 		}
@@ -1121,7 +1136,7 @@ class CompareApi {
 			}
 
 			//Generate sql script to delete record because not exists on source database table
-			result.sqlScript.push(sql.generateDeleteTableRecordScript(table, sourceTableRecords.records.fields, keyFieldsMap));
+			result.sqlScript.push(sql.generateDeleteTableRecordScript(fullTableName, tableData.sourceData.records.fields, keyFieldsMap));
 			result.isSequenceRebaseNeeded = true;
 		});
 
@@ -1135,7 +1150,7 @@ class CompareApi {
 	 */
 	static getKeyFieldsMap(keyFields, record) {
 		let keyFieldsMap = {};
-		keyFields.forEach((item, index) => {
+		keyFields.forEach((item) => {
 			keyFieldsMap[item] = record[item];
 		});
 		return keyFieldsMap;
@@ -1232,43 +1247,38 @@ class CompareApi {
 	 * @returns {String}
 	 */
 	static async saveSqlScript(scriptLines, config, scriptName, eventEmitter) {
-		return new Promise(async (resolve, reject) => {
+		if (scriptLines.length <= 0) return null;
+
+		const now = new Date();
+		const fileName = `${now.toISOString().replace(/[-:.TZ]/g, "")}_${scriptName}.sql`;
+		const scriptPath = path.resolve(process.cwd(), config.compareOptions.outputDirectory, fileName);
+		if (config.compareOptions.getAuthorFromGit) {
+			config.compareOptions.author = await core.getGitAuthor();
+		}
+		const datetime = now.toISOString();
+		const titleLength = config.compareOptions.author.length > now.toISOString().length ? config.compareOptions.author.length : datetime.length;
+
+		return new Promise((resolve, reject) => {
 			try {
-				if (scriptLines.length <= 0) resolve(null);
-				else {
-					const now = new Date();
-					const fileName = `${now.toISOString().replace(/[-:\.TZ]/g, "")}_${scriptName}.sql`;
-					const scriptPath = path.resolve(process.cwd(), config.compareOptions.outputDirectory, fileName);
+				var file = fs.createWriteStream(scriptPath);
 
-					var file = fs.createWriteStream(scriptPath);
+				file.on("error", reject);
 
-					file.on("error", reject);
+				file.on("finish", () => {
+					eventEmitter.emit("compare", "Patch file have been created", 95);
+					resolve(scriptPath);
+				});
 
-					file.on("finish", () => {
-						eventEmitter.emit("compare", "Patch file have been created", 95);
-						resolve(scriptPath);
-					});
+				file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
+				file.write(`/*** SCRIPT AUTHOR: ${config.compareOptions.author.padEnd(titleLength)} ***/\n`);
+				file.write(`/***    CREATED ON: ${datetime.padEnd(titleLength)} ***/\n`);
+				file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
 
-					if (config.compareOptions.getAuthorFromGit) {
-						config.compareOptions.author = await core.getGitAuthor();
-					}
+				scriptLines.forEach(function (line) {
+					file.write(line);
+				});
 
-					let titleLength =
-						config.compareOptions.author.length > now.toISOString().length
-							? config.compareOptions.author.length
-							: now.toISOString().length;
-
-					file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
-					file.write(`/*** SCRIPT AUTHOR: ${config.compareOptions.author.padEnd(titleLength)} ***/\n`);
-					file.write(`/***    CREATED ON: ${now.toISOString().padEnd(titleLength)} ***/\n`);
-					file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
-
-					scriptLines.forEach(function (line) {
-						file.write(line);
-					});
-
-					file.end();
-				}
+				file.end();
 			} catch (err) {
 				reject(err);
 			}

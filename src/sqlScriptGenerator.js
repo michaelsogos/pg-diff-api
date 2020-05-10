@@ -117,9 +117,8 @@ var helper = {
 	 *
 	 * @param {String} table
 	 * @param {Object} schema
-	 * @param {import("./models/config")} config
 	 */
-	generateCreateTableScript: function (table, schema, config) {
+	generateCreateTableScript: function (table, schema) {
 		//Generate columns script
 		let columns = [];
 		for (let column in schema.columns) {
@@ -133,8 +132,7 @@ var helper = {
 
 		//Generate options script
 		let options = "";
-		if (schema.hasOwnProperty("options") && schema.options.hasOwnProperty("withOids"))
-			options = `\nWITH ( OIDS=${schema.options.withOids.toString().toUpperCase()} )`;
+		if (schema.options && schema.options.withOids) options = `\nWITH ( OIDS=${schema.options.withOids.toString().toUpperCase()} )`;
 
 		//Generate indexes script
 		let indexes = [];
@@ -179,18 +177,19 @@ var helper = {
 	 */
 	generateChangeTableColumnScript: function (table, column, changes) {
 		let definitions = [];
-		if (changes.hasOwnProperty("nullable")) definitions.push(`ALTER COLUMN ${column} ${changes.nullable ? "DROP NOT NULL" : "SET NOT NULL"}`);
+		if (Object.prototype.hasOwnProperty.call(changes, "nullable"))
+			definitions.push(`ALTER COLUMN ${column} ${changes.nullable ? "DROP NOT NULL" : "SET NOT NULL"}`);
 
-		if (changes.hasOwnProperty("datatype")) {
+		if (changes.datatype) {
 			definitions.push(`${hints.changeColumnDataType}`);
 			let dataTypeDefinition = this.__generateColumnDataTypeDefinition(changes);
 			definitions.push(`ALTER COLUMN ${column} SET DATA TYPE ${dataTypeDefinition} USING ${column}::${dataTypeDefinition}`);
 		}
 
-		if (changes.hasOwnProperty("default"))
+		if (Object.prototype.hasOwnProperty.call(changes, "default"))
 			definitions.push(`ALTER COLUMN ${column} ${changes.default ? "SET" : "DROP"} DEFAULT ${changes.default || ""}`);
 
-		if (changes.hasOwnProperty("identity") && changes.hasOwnProperty("isNewIdentity")) {
+		if (Object.prototype.hasOwnProperty.call(changes, "identity") && Object.prototype.hasOwnProperty.call(changes, "isNewIdentity")) {
 			let identityDefinition = "";
 			if (changes.identity) {
 				//truly values
@@ -278,49 +277,49 @@ var helper = {
 	generateChangesTableRoleGrantsScript: function (table, role, changes) {
 		let privileges = [];
 
-		if (changes.hasOwnProperty("select"))
+		if (Object.prototype.hasOwnProperty.call(changes, "select"))
 			privileges.push(
 				`${changes.select ? "GRANT" : "REVOKE"} SELECT ON TABLE ${table} ${changes.select ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("insert"))
+		if (Object.prototype.hasOwnProperty.call(changes, "insert"))
 			privileges.push(
 				`${changes.insert ? "GRANT" : "REVOKE"} INSERT ON TABLE ${table} ${changes.insert ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("update"))
+		if (Object.prototype.hasOwnProperty.call(changes, "update"))
 			privileges.push(
 				`${changes.update ? "GRANT" : "REVOKE"} UPDATE ON TABLE ${table} ${changes.update ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("delete"))
+		if (Object.prototype.hasOwnProperty.call(changes, "delete"))
 			privileges.push(
 				`${changes.delete ? "GRANT" : "REVOKE"} DELETE ON TABLE ${table} ${changes.delete ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("truncate"))
+		if (Object.prototype.hasOwnProperty.call(changes, "truncate"))
 			privileges.push(
 				`${changes.truncate ? "GRANT" : "REVOKE"} TRUNCATE ON TABLE ${table} ${changes.truncate ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("references"))
+		if (Object.prototype.hasOwnProperty.call(changes, "references"))
 			privileges.push(
 				`${changes.references ? "GRANT" : "REVOKE"} REFERENCES ON TABLE ${table} ${changes.references ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("trigger"))
+		if (Object.prototype.hasOwnProperty.call(changes, "trigger"))
 			privileges.push(
 				`${changes.trigger ? "GRANT" : "REVOKE"} TRIGGER ON TABLE ${table} ${changes.trigger ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
@@ -447,7 +446,7 @@ var helper = {
 	generateChangesProcedureRoleGrantsScript: function (procedure, argTypes, role, changes) {
 		let privileges = [];
 
-		if (changes.hasOwnProperty("execute"))
+		if (Object.prototype.hasOwnProperty.call(changes, "execute"))
 			privileges.push(
 				`${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
@@ -653,21 +652,21 @@ var helper = {
 	generateChangesSequenceRoleGrantsScript: function (sequence, role, changes) {
 		let privileges = [];
 
-		if (changes.hasOwnProperty("select"))
+		if (Object.prototype.hasOwnProperty.call(changes, "select"))
 			privileges.push(
 				`${changes.select ? "GRANT" : "REVOKE"} SELECT ON SEQUENCE ${sequence} ${changes.select ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("usage"))
+		if (Object.prototype.hasOwnProperty.call(changes, "usage"))
 			privileges.push(
 				`${changes.usage ? "GRANT" : "REVOKE"} USAGE ON SEQUENCE ${sequence} ${changes.usage ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing
 				}`
 			);
 
-		if (changes.hasOwnProperty("update"))
+		if (Object.prototype.hasOwnProperty.call(changes, "update"))
 			privileges.push(
 				`${changes.update ? "GRANT" : "REVOKE"} UPDATE ON SEQUENCE ${sequence} ${changes.update ? "TO" : "FROM"} ${role};${
 					hints.potentialRoleMissing

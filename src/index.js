@@ -3,54 +3,45 @@ const compareApi = require("./api/CompareApi");
 const EventEmitter = require("events");
 
 class PgDiff {
-  /**
-   *
-   * @param {import("./models/config")} config
-   */
-  constructor(config) {
-    this["config"] = config;
-    /** @type {import("events")} */
+	/**
+	 *
+	 * @param {import("./models/config")} config
+	 */
+	constructor(config) {
+		this["config"] = config;
 
-    this.events = new EventEmitter();
-  }
+		/** @type {import("events")} */
+		this.events = new EventEmitter();
+	}
 
-  /**
-   *
-   * @param {Boolean} force
-   * @returns {Promise<import("./models/patchInfo")[]>} Return a list of PatchInfo.
-   */
-  async migrate(force) {
-    force = force || false;
-    return await migrationApi.migrate(this.config, force);
-  }
+	/**
+	 *
+	 * @param {Boolean} force
+	 * @returns {Promise<import("./models/patchInfo")[]>} Return a list of PatchInfo.
+	 */
+	async migrate(force) {
+		force = force || false;
+		return await migrationApi.migrate(this.config, force, this.events);
+	}
 
-  /**
-   *
-   * @param {String} scriptName
-   * @returns {String} Return null if no patch has been created.
-   */
-  async compare(scriptName) {
-    if (!scriptName) throw new Error("The script name must be specified!");
-    return await compareApi.compare(this.config, scriptName, this.events);
-  }
+	/**
+	 *
+	 * @param {String} scriptName
+	 * @returns {String} Return null if no patch has been created.
+	 */
+	async compare(scriptName) {
+		if (!scriptName) throw new Error("The script name must be specified!");
+		return await compareApi.compare(this.config, scriptName, this.events);
+	}
 
-  /*
-     async savePatch(config, patchFileName) {
-        let migrationConfig = core.prepareMigrationConfig(config);
-        let pgClient = await core.makePgClient(config.targetClient);
-
-        await core.prepareMigrationsHistoryTable(pgClient, migrationConfig);
-
-        let patchFilePath = path.resolve(migrationConfig.patchesFolder, patchFileName);
-
-        if (!fs.existsSync(patchFilePath)) throw new Error(`The patch file ${patchFilePath} does not exists!`);
-
-        let patchFileInfo = core.getPatchFileInfo(patchFileName, migrationConfig.patchesFolder);
-        await this.addRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-        patchFileInfo.status = patchStatus.DONE;
-        await this.updateRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-    }
-    */
+	/**
+	 *
+	 * @param {String} patchFileName
+	 */
+	async save(patchFileName) {
+		if (!patchFileName) throw new Error("The patch file name must be specified!");
+		return await migrationApi.savePatch(this.config, patchFileName);
+	}
 }
 
 module.exports.PgDiff = PgDiff;
