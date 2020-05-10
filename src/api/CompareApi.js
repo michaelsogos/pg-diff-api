@@ -151,7 +151,15 @@ class CompareApi {
 		eventEmitter.emit("compare", "TABLE objects have been compared", 50);
 		sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
 		eventEmitter.emit("compare", "VIEW objects have been compared", 55);
-		sqlPatch.push(...this.compareMaterializedViews(dbSourceObjects.materializedViews, dbTargetObjects.materializedViews, droppedViews, config));
+		sqlPatch.push(
+			...this.compareMaterializedViews(
+				dbSourceObjects.materializedViews,
+				dbTargetObjects.materializedViews,
+				droppedViews,
+				droppedIndexes,
+				config
+			)
+		);
 		eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 60);
 		sqlPatch.push(...this.compareProcedures(dbSourceObjects.functions, dbTargetObjects.functions, config));
 		eventEmitter.emit("compare", "PROCEDURE objects have been compared", 65);
@@ -627,9 +635,10 @@ class CompareApi {
 	 * @param {Object} sourceMaterializedViews
 	 * @param {Object} targetMaterializedViews
 	 * @param {String[]} droppedViews
+	 * @param {String[]} droppedIndexes
 	 * @param {import("../models/config")} config
 	 */
-	static compareMaterializedViews(sourceMaterializedViews, targetMaterializedViews, droppedViews, config) {
+	static compareMaterializedViews(sourceMaterializedViews, targetMaterializedViews, droppedViews, droppedIndexes, config) {
 		let finalizedScript = [];
 
 		for (let view in sourceMaterializedViews) {
