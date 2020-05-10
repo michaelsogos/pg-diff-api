@@ -137,12 +137,14 @@ class core {
 	static async getGitAuthor() {
 		const util = require("util");
 		const exec = util.promisify(require("child_process").exec);
+		// eslint-disable-next-line no-unused-vars
 		const childProcess = require("child_process");
 
 		async function getLocalAuthorName() {
 			let result = null;
 
 			try {
+				// eslint-disable-next-line no-unused-vars
 				const { stdout, stderr } = await exec("git config --local user.name");
 				result = stdout.trim();
 			} catch (err) {
@@ -151,10 +153,12 @@ class core {
 
 			return result;
 		}
+
 		async function getLocalAuthorEmail() {
 			let result = null;
 
 			try {
+				// eslint-disable-next-line no-unused-vars
 				const { stdout, stderr } = await exec("git config --local user.email");
 				result = stdout.trim();
 			} catch (err) {
@@ -167,6 +171,7 @@ class core {
 			let result = null;
 
 			try {
+				// eslint-disable-next-line no-unused-vars
 				const { stdout, stderr } = await exec("git config --global user.name");
 				result = stdout.trim();
 			} catch (err) {
@@ -179,6 +184,7 @@ class core {
 			let result = null;
 
 			try {
+				// eslint-disable-next-line no-unused-vars
 				const { stdout, stderr } = await exec("git config --global user.email");
 				result = stdout.trim();
 			} catch (err) {
