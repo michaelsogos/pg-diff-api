@@ -1142,7 +1142,7 @@ class CompareApi {
 			}
 
 			//Generate sql script to delete record because not exists on source database table
-			result.sqlScript.push(sql.generateDeleteTableRecordScript(table, sourceTableRecords.records.fields, keyFieldsMap));
+			result.sqlScript.push(sql.generateDeleteTableRecordScript(fullTableName, sourceTableRecords.records.fields, keyFieldsMap));
 			result.isSequenceRebaseNeeded = true;
 		});
 
