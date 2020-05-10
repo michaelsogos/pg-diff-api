@@ -76,7 +76,9 @@ class MigrationApi {
 				case patchStatus.ERROR:
 					{
 						if (!force)
-							throw new Error(`The patch version={${patchFileInfo.version}} and name={${patchFileInfo.name}} encountered an error!`);
+							throw new Error(
+								`The patch version={${patchFileInfo.version}} and name={${patchFileInfo.name}} previously encountered an error! Try to "force" migration with argument -mr.`
+							);
 
 						progressValue += progressStep;
 						eventEmitter.emit("migrate", `Executing patch ${patchFileInfo.filename} ...`, progressValue);
