@@ -136,7 +136,7 @@ class MigrationApi {
 	static async applyPatch(pgClient, patchFileInfo, config) {
 		await this.addRecordToHistoryTable(pgClient, patchFileInfo, config);
 		try {
-			await this.readPatch(pgClient, patchFileInfo, config);
+			let patchStatus = await this.readPatch(pgClient, patchFileInfo, config);
 			await this.updateRecordToHistoryTable(pgClient, patchStatus, config);
 		} catch (err) {
 			let patchStatus = patchFileInfo;
@@ -252,9 +252,10 @@ class MigrationApi {
 		let changes = {
 			status: patchScript.status,
 			last_message: patchScript.message,
-			script: patchScript.command,
 			applied_on: new Date(),
 		};
+
+		if (patchScript.status != patchStatus.ERROR) changes.script = patchScript.command;
 
 		let filterConditions = {
 			version: patchScript.version,
