@@ -385,7 +385,7 @@ class CompareApi {
 		if (Object.keys(changes).length > 0) {
 			let rawColumnName = columnName.substring(1).slice(0, -1);
 
-			//Check if the column is has constraint
+			//Check if the column has constraint
 			for (let constraint in targetTable.constraints) {
 				if (droppedConstraints.includes(constraint)) continue;
 
@@ -439,7 +439,7 @@ class CompareApi {
 				});
 			}
 
-			sqlScript.push(sql.generateChangeTableColumnScript(table, column, changes));
+			sqlScript.push(sql.generateChangeTableColumnScript(tableName, columnName, changes));
 		}
 
 		return sqlScript;
