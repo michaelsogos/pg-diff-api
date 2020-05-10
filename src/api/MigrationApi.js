@@ -232,7 +232,7 @@ class MigrationApi {
 	 */
 	static async savePatch(config, patchFileName) {
 		let migrationConfig = core.prepareMigrationConfig(config);
-		let pgClient = await core.makePgClient(config.targetClient);
+		let pgClient = await core.makePgClient(config.sourceClient);
 
 		await core.prepareMigrationsHistoryTable(pgClient, migrationConfig);
 
