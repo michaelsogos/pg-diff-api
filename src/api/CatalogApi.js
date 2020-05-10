@@ -14,7 +14,15 @@ const query = {
 	 * @param {String[]} schemas
 	 */
 	getTables: function (schemas) {
-		return `SELECT schemaname, tablename, tableowner FROM pg_tables WHERE schemaname IN ('${schemas.join("','")}')`;
+		return `SELECT schemaname, tablename, tableowner 
+                FROM pg_tables t
+                INNER JOIN pg_class c on t.tablename::regclass = c.oid 
+                WHERE t.schemaname IN ('${schemas.join("','")}')
+                AND c.oid NOT IN (
+                    SELECT d.objid 
+                    FROM pg_depend d
+                    WHERE d.deptype = 'e'
+                )`;
 	},
 	/**
 	 *
@@ -94,7 +102,15 @@ const query = {
 	 * @param {String[]} schemas
 	 */
 	getViews: function (schemas) {
-		return `SELECT schemaname, viewname, viewowner, definition FROM pg_views WHERE schemaname IN ('${schemas.join("','")}')`;
+		return `SELECT schemaname, viewname, viewowner, definition 
+                FROM pg_views v
+                INNER JOIN pg_class c on v.viewname::regclass = c.oid 
+                WHERE v.schemaname IN ('${schemas.join("','")}')
+                AND c.oid NOT IN (
+                    SELECT d.objid 
+                    FROM pg_depend d
+                    WHERE d.deptype = 'e'
+                )`;
 	},
 	/**
 	 *
@@ -164,7 +180,12 @@ const query = {
 		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes
                 FROM pg_proc p
                 INNER JOIN pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL`;
+                WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL AND p.prokind = 'f'
+                AND p."oid" NOT IN (
+                    SELECT d.objid 
+                    FROM pg_depend d
+                    WHERE d.deptype = 'e'
+                )`;
 	},
 	/**
 	 *

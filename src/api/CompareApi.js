@@ -85,7 +85,7 @@ class CompareApi {
 				dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
 				dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
 
-				//TODO: Do we need to retrieve data types?
+				//TODO: Add a way to retrieve AGGREGATE and WINDOW functions
 				//TODO: Do we need to retrieve roles?
 				//TODO: Do we need to retieve special table like TEMPORARY and UNLOGGED? for sure not temporary, but UNLOGGED probably yes.
 				//TODO: Do we need to retrieve collation for both table and columns?
