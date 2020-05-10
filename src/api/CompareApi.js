@@ -327,7 +327,7 @@ class CompareApi {
 				);
 			} else {
 				//Table column not exists on target database, then generate script to add column
-				sqlScript.push(sql.generateAddTableColumnScript(tableName, sourceTableColumn, sourceTableColumns[column]));
+				sqlScript.push(sql.generateAddTableColumnScript(tableName, sourceTableColumn, sourceTableColumns[sourceTableColumn]));
 				if (!addedColumns[tableName]) addedColumns[tableName] = [];
 
 				addedColumns[tableName].push(sourceTableColumn);
