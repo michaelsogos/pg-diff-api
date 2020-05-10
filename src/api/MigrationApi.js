@@ -136,16 +136,22 @@ class MigrationApi {
 	static async applyPatch(pgClient, patchFileInfo, config) {
 		await this.addRecordToHistoryTable(pgClient, patchFileInfo, config);
 		try {
-			let patchStatus = await this.readPatch(pgClient, patchFileInfo, config);
-			await this.updateRecordToHistoryTable(pgClient, patchStatus, config);
+			let patchScript = await this.readPatch(pgClient, patchFileInfo, config);
+			await this.updateRecordToHistoryTable(pgClient, patchScript, config);
 		} catch (err) {
-			let patchStatus = patchFileInfo;
-			patchStatus.status = patchStatus.ERROR;
-			patchStatus.message = err.toString();
-			await this.updateRecordToHistoryTable(pgClient, patchStatus, config);
+			let patchScript = patchFileInfo;
+			patchScript.status = patchStatus.ERROR;
+			patchScript.message = err.toString();
+			await this.updateRecordToHistoryTable(pgClient, patchScript, config);
 		}
 	}
 
+	/**
+	 *
+	 * @param {import("pg").Client} pgClient
+	 * @param {import("../models/patchInfo")} patchFileInfo
+	 * @param {Object} config
+	 */
 	static async readPatch(pgClient, patchFileInfo, config) {
 		var self = this;
 
@@ -157,9 +163,9 @@ class MigrationApi {
 				let commandExecuted = 0;
 				let patchError = null;
 
-				let patchStatus = patchFileInfo;
-				patchStatus.command = "";
-				patchStatus.message = "";
+				let patchScript = patchFileInfo;
+				patchScript.command = "";
+				patchScript.message = "";
 
 				reader.on("error", (err) => {
 					reject(err);
@@ -171,7 +177,7 @@ class MigrationApi {
 						if (line.startsWith("--- END")) {
 							readingBlock = false;
 							reader.pause();
-							self.executePatchScript(pgClient, patchStatus, config)
+							self.executePatchScript(pgClient, patchScript, config)
 								.then(() => {
 									commandExecuted += 1;
 									reader.resume();
@@ -183,14 +189,14 @@ class MigrationApi {
 									reader.resume();
 								});
 						} else {
-							patchStatus.command += `${line}\n`;
+							patchScript.command += `${line}\n`;
 						}
 					}
 
 					if (!readingBlock && line.startsWith("--- BEGIN")) {
 						readingBlock = true;
-						patchStatus.command = "";
-						patchStatus.message = line;
+						patchScript.command = "";
+						patchScript.message = line;
 					}
 				});
 
@@ -204,10 +210,10 @@ class MigrationApi {
 					if (patchError) {
 						reject(patchError);
 					} else {
-						patchStatus.status = patchStatus.DONE;
-						patchStatus.message = "";
-						patchStatus.command = "";
-						resolve(patchStatus);
+						patchScript.status = patchStatus.DONE;
+						patchScript.message = "";
+						patchScript.command = "";
+						resolve(patchScript);
 					}
 				});
 			} catch (e) {
@@ -236,10 +242,10 @@ class MigrationApi {
 		await this.addRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
 	}
 
-	static async executePatchScript(pgClient, patchStatus, config) {
-		patchStatus.status = patchStatus.IN_PROGRESS;
-		await this.updateRecordToHistoryTable(pgClient, patchStatus, config);
-		await pgClient.query(patchStatus.command);
+	static async executePatchScript(pgClient, patchScript, config) {
+		patchScript.status = patchStatus.IN_PROGRESS;
+		await this.updateRecordToHistoryTable(pgClient, patchScript, config);
+		await pgClient.query(patchScript.command);
 	}
 
 	/**
