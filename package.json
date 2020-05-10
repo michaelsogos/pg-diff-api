@@ -1,6 +1,6 @@
 {
 	"name": "pg-diff-api",
-	"version": "1.0.4-beta.14",
+	"version": "1.0.4-beta.15",
 	"description": "PostgreSQL migration strategy for NodeJS",
 	"pgver": "9.6+",
 	"main": "./src/index.js",

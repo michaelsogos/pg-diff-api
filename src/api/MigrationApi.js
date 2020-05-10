@@ -281,11 +281,17 @@ class MigrationApi {
 		await pgClient.query(command);
 	}
 
+	/**
+	 *
+	 * @param {import("pg").Client} pgClient
+	 * @param {import("../models/patchInfo")} patchFileInfo
+	 * @param {Object} config
+	 */
 	static async addRecordToHistoryTable(pgClient, patchFileInfo, config) {
 		let changes = {
 			version: patchFileInfo.version,
 			name: patchFileInfo.name,
-			status: patchStatus.TO_APPLY,
+			status: patchFileInfo.status || patchStatus.TO_APPLY,
 			last_message: "",
 			script: "",
 			applied_on: null,
