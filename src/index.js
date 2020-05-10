@@ -21,7 +21,7 @@ class PgDiff {
 	 */
 	async migrate(force) {
 		force = force || false;
-		return await migrationApi.migrate(this.config, force);
+		return await migrationApi.migrate(this.config, force, this.events);
 	}
 
 	/**
@@ -34,23 +34,9 @@ class PgDiff {
 		return await compareApi.compare(this.config, scriptName, this.events);
 	}
 
-	/*
-     async savePatch(config, patchFileName) {
-        let migrationConfig = core.prepareMigrationConfig(config);
-        let pgClient = await core.makePgClient(config.targetClient);
-
-        await core.prepareMigrationsHistoryTable(pgClient, migrationConfig);
-
-        let patchFilePath = path.resolve(migrationConfig.patchesFolder, patchFileName);
-
-        if (!fs.existsSync(patchFilePath)) throw new Error(`The patch file ${patchFilePath} does not exists!`);
-
-        let patchFileInfo = core.getPatchFileInfo(patchFileName, migrationConfig.patchesFolder);
-        await this.addRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-        patchFileInfo.status = patchStatus.DONE;
-        await this.updateRecordToHistoryTable(pgClient, patchFileInfo, migrationConfig);
-    }
-    */
+	async savePatch(patchFileName) {
+		return await migrationApi.savePatch(this.config, patchFileName);
+	}
 }
 
 module.exports.PgDiff = PgDiff;
