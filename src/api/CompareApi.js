@@ -595,7 +595,7 @@ class CompareApi {
 						//It will recreate a dropped view because changes happens on involved columns
 						sqlScript.push(sql.generateCreateViewScript(view, sourceViews[view]));
 
-					sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges), config);
+					sqlScript.push(...this.compareTablePrivileges(view, sourceViews[view].privileges, targetViews[view].privileges, config));
 					if (sourceViews[view].owner != targetViews[view].owner)
 						sqlScript.push(sql.generateChangeTableOwnerScript(view, sourceViews[view].owner));
 				}
