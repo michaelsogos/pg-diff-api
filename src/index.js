@@ -34,7 +34,12 @@ class PgDiff {
 		return await compareApi.compare(this.config, scriptName, this.events);
 	}
 
-	async savePatch(patchFileName) {
+	/**
+	 *
+	 * @param {String} patchFileName
+	 */
+	async save(patchFileName) {
+		if (!patchFileName) throw new Error("The patch file name must be specified!");
 		return await migrationApi.savePatch(this.config, patchFileName);
 	}
 }
