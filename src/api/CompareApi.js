@@ -16,10 +16,22 @@ class CompareApi {
 	 */
 	static async compare(config, scriptName, eventEmitter) {
 		eventEmitter.emit("compare", "Compare started", 0);
+
+		eventEmitter.emit("compare", "Connecting to source database ...", 10);
 		let pgSourceClient = await core.makePgClient(config.sourceClient);
-		eventEmitter.emit("compare", "Connected to SOURCE CLIENT", 10);
+		eventEmitter.emit(
+			"compare",
+			`Connected to source PostgreSQL ${pgSourceClient.version.version} on [${config.sourceClient.host}:${config.sourceClient.port}/${config.sourceClient.database}] `,
+			11
+		);
+
+		eventEmitter.emit("compare", "Connecting to target database ...", 20);
 		let pgTargetClient = await core.makePgClient(config.targetClient);
-		eventEmitter.emit("compare", "Connected to TARGET CLIENT", 20);
+		eventEmitter.emit(
+			"compare",
+			`Connected to target PostgreSQL ${pgTargetClient.version.version} on [${config.targetClient.host}:${config.targetClient.port}/${config.targetClient.database}] `,
+			21
+		);
 
 		let dbSourceObjects = await this.collectSchemaObjects(pgSourceClient, config);
 		eventEmitter.emit("compare", "Collected SOURCE objects", 30);
@@ -714,7 +726,7 @@ class CompareApi {
 				//Procedure not exists on target database, then generate the script to create procedure
 				actionLabel = "CREATE";
 
-				sqlScript.push(sql.generateCreateProcedureScript(procedure, this.__sourceSchema.functions[procedure]));
+				sqlScript.push(sql.generateCreateProcedureScript(procedure, sourceFunctions[procedure]));
 			}
 
 			finalizedScript.push(...this.finalizeScript(`${actionLabel} FUNCTION ${procedure}`, sqlScript));
@@ -800,7 +812,7 @@ class CompareApi {
 				//Sequence not exists on target database, then generate the script to create sequence
 				actionLabel = "CREATE";
 
-				sqlScript.push(sql.generateCreateSequenceScript(sequence, this.__sourceSchema.sequences[sequence]));
+				sqlScript.push(sql.generateCreateSequenceScript(sequence, sourceSequences[sequence]));
 			}
 			finalizedScript.push(...this.finalizeScript(`${actionLabel} SEQUENCE ${sequence}`, sqlScript));
 		}
