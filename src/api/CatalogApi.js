@@ -180,7 +180,7 @@ const query = {
 		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes
                 FROM pg_proc p
                 INNER JOIN pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL AND p.prokind = 'f'
+                WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL AND proisagg = false
                 AND p."oid" NOT IN (
                     SELECT d.objid 
                     FROM pg_depend d
@@ -349,8 +349,9 @@ class CatalogApi {
 				});
 
 				let privileges = await client.query(query.getTablePrivileges(table.schemaname, table.tablename));
-				privileges.rows.forEach((privilege) => {
+				privileges.rows.forEach((privilege) => {				
 					if (
+						config.compareOptions.schemaCompare.roles == null ||
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
 						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
 					)
