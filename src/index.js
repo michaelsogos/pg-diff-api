@@ -16,12 +16,14 @@ class PgDiff {
 
 	/**
 	 *
-	 * @param {Boolean} force
+	 * @param {Boolean} force True to force execution even for patches encountered an error
+	 * @param {Boolean} toSourceClient True to execute patches on source client
 	 * @returns {Promise<import("./models/patchInfo")[]>} Return a list of PatchInfo.
 	 */
-	async migrate(force) {
+	async migrate(force, toSourceClient) {
 		force = force || false;
-		return await migrationApi.migrate(this.config, force, this.events);
+		toSourceClient = toSourceClient || false;
+		return await migrationApi.migrate(this.config, force, toSourceClient, this.events);
 	}
 
 	/**

@@ -13,6 +13,7 @@ class CompareApi {
 	 * @param {import("../models/config")} config
 	 * @param {String} scriptName
 	 * @param {import("events")} eventEmitter
+	 * @returns {Promise<String>} Return the sql patch file pathh
 	 */
 	static async compare(config, scriptName, eventEmitter) {
 		eventEmitter.emit("compare", "Compare started", 0);
