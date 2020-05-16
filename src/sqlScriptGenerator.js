@@ -410,6 +410,22 @@ var helper = {
 	},
 	/**
 	 *
+	 * @param {String} aggregate
+	 * @param {Object} schema
+	 */
+	generateCreateAggregateScript: function (aggregate, schema) {
+		//Generate privileges script
+		let privileges = [];
+		privileges.push(`ALTER AGGREGATE ${aggregate}(${schema.argTypes}) OWNER TO ${schema.owner};`);
+		for (let role in schema.privileges) {
+			privileges = privileges.concat(this.__generateProcedureGrantsDefinition(aggregate, schema.argTypes, role, schema.privileges[role]));
+		}
+
+		let script = `\nCREATE AGGREGATE ${aggregate} (${schema.argTypes}) (${schema.definition});\n${privileges.join("\n")}\n`;
+		return script;
+	},
+	/**
+	 *
 	 * @param {String} procedure
 	 * @param {Object} schema
 	 */
@@ -419,10 +435,27 @@ var helper = {
 	},
 	/**
 	 *
+	 * @param {String} aggregate
+	 * @param {Object} schema
+	 */
+	generateChangeAggregateScript: function (aggregate, schema) {
+		let script = `\nDROP AGGREGATE IF EXISTS ${aggregate}(${schema.argTypes});\n${this.generateCreateAggregateScript(aggregate, schema)}`;
+		return script;
+	},
+	/**
+	 *
 	 * @param {String} procedure
 	 */
 	generateDropProcedureScript: function (procedure) {
 		let script = `\nDROP FUNCTION IF EXISTS ${procedure};\n`;
+		return script;
+	},
+	/**
+	 *
+	 * @param {String} aggregate
+	 */
+	generateDropAggregateScript: function (aggregate) {
+		let script = `\nDROP AGGREGATE IF EXISTS ${aggregate};\n`;
 		return script;
 	},
 	/**
@@ -464,6 +497,16 @@ var helper = {
 	 */
 	generateChangeProcedureOwnerScript: function (procedure, argTypes, owner) {
 		let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
+		return script;
+	},
+	/**
+	 *
+	 * @param {String} aggregate
+	 * @param {String} argTypes
+	 * @param {String} owner
+	 */
+	generateChangeAggregateOwnerScript: function (aggregate, argTypes, owner) {
+		let script = `\nALTER AGGREGATE ${aggregate}(${argTypes}) OWNER TO ${owner};`;
 		return script;
 	},
 	/**
