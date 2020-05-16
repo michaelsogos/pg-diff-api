@@ -57,6 +57,7 @@ class CompareApi {
 			eventEmitter
 		);
 
+		//The progress step size is 20
 		if (config.compareOptions.dataCompare.enable) {
 			scripts.push(
 				...(await this.compareTablesRecords(
@@ -70,7 +71,7 @@ class CompareApi {
 					eventEmitter
 				))
 			);
-			eventEmitter.emit("compare", "Table records have been compared", 90);
+			eventEmitter.emit("compare", "Table records have been compared", 95);
 		}
 
 		let scriptFilePath = await this.saveSqlScript(scripts, config, scriptName, eventEmitter);
@@ -94,6 +95,7 @@ class CompareApi {
 		dbObjects.views = await catalogApi.retrieveViews(client, config);
 		dbObjects.materializedViews = await catalogApi.retrieveMaterializedViews(client, config);
 		dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
+		dbObjects.aggregates = await catalogApi.retrieveAggregates(client, config);
 		dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
 
 		//TODO: Add a way to retrieve AGGREGATE and WINDOW functions
@@ -131,6 +133,7 @@ class CompareApi {
 
 		sqlPatch.push(...this.compareSchemas(dbSourceObjects.schemas, dbTargetObjects.schemas));
 		eventEmitter.emit("compare", "SCHEMA objects have been compared", 45);
+
 		sqlPatch.push(
 			...this.compareTables(
 				dbSourceObjects.tables,
@@ -144,8 +147,10 @@ class CompareApi {
 			)
 		);
 		eventEmitter.emit("compare", "TABLE objects have been compared", 50);
+
 		sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
 		eventEmitter.emit("compare", "VIEW objects have been compared", 55);
+
 		sqlPatch.push(
 			...this.compareMaterializedViews(
 				dbSourceObjects.materializedViews,
@@ -156,10 +161,15 @@ class CompareApi {
 			)
 		);
 		eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 60);
+
 		sqlPatch.push(...this.compareProcedures(dbSourceObjects.functions, dbTargetObjects.functions, config));
 		eventEmitter.emit("compare", "PROCEDURE objects have been compared", 65);
+
+		sqlPatch.push(...this.compareAggregates(dbSourceObjects.aggregates, dbTargetObjects.aggregates, config));
+		eventEmitter.emit("compare", "AGGREGATE objects have been compared", 70);
+
 		sqlPatch.push(...this.compareSequences(dbSourceObjects.sequences, dbTargetObjects.sequences));
-		eventEmitter.emit("compare", "SEQUENCE objects have been compared", 70);
+		eventEmitter.emit("compare", "SEQUENCE objects have been compared", 75);
 
 		return sqlPatch;
 	}
@@ -743,6 +753,63 @@ class CompareApi {
 				if (!sourceFunctions[procedure]) sqlScript.push(sql.generateDropProcedureScript(procedure));
 
 				finalizedScript.push(...this.finalizeScript(`DROP FUNCTION ${procedure}`, sqlScript));
+			}
+
+		return finalizedScript;
+	}
+
+	/**
+	 *
+	 * @param {Object} sourceAggregates
+	 * @param {Object} targetAggregates
+	 * @param {import("../models/config")} config
+	 */
+	static compareAggregates(sourceAggregates, targetAggregates, config) {
+		let finalizedScript = [];
+
+		for (let aggregate in sourceAggregates) {
+			let sqlScript = [];
+			let actionLabel = "";
+
+			if (targetAggregates[aggregate]) {
+				//Aggregate exists on both database, then compare procedure definition
+				actionLabel = "ALTER";
+
+				//TODO: Is correct that if definition is different automatically GRANTS and OWNER will not be updated also?
+				if (sourceAggregates[aggregate].definition != targetAggregates[aggregate].definition) {
+					sqlScript.push(sql.generateChangeAggregateScript(aggregate, sourceAggregates[aggregate]));
+				} else {
+					sqlScript.push(
+						...this.compareProcedurePrivileges(
+							aggregate,
+							sourceAggregates[aggregate].argTypes,
+							sourceAggregates[aggregate].privileges,
+							targetAggregates[aggregate].privileges
+						)
+					);
+
+					if (sourceAggregates[aggregate].owner != targetAggregates[aggregate].owner)
+						sqlScript.push(
+							sql.generateChangeAggregateOwnerScript(aggregate, sourceAggregates[aggregate].argTypes, sourceAggregates[aggregate].owner)
+						);
+				}
+			} else {
+				//Aggregate not exists on target database, then generate the script to create aggregate
+				actionLabel = "CREATE";
+
+				sqlScript.push(sql.generateCreateAggregateScript(aggregate, sourceAggregates[aggregate]));
+			}
+
+			finalizedScript.push(...this.finalizeScript(`${actionLabel} AGGREGATE ${aggregate}`, sqlScript));
+		}
+
+		if (config.compareOptions.schemaCompare.dropMissingAggregate)
+			for (let aggregate in targetAggregates) {
+				let sqlScript = [];
+
+				if (!sourceAggregates[aggregate]) sqlScript.push(sql.generateDropAggregateScript(aggregate));
+
+				finalizedScript.push(...this.finalizeScript(`DROP AGGREGATE ${aggregate}`, sqlScript));
 			}
 
 		return finalizedScript;

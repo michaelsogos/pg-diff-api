@@ -174,6 +174,7 @@ const query = {
 	/**
 	 *
 	 * @param {String[]} schemas
+	 * @param {import("../models/serverVersion")} serverVersion
 	 */
 	getFunctions: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
@@ -183,6 +184,79 @@ const query = {
 				WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL ${
 			core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind = 'f'" : "AND p.proisagg = false AND p.proiswindow = false"
 		} AND p."oid" NOT IN (
+                    SELECT d.objid 
+                    FROM pg_depend d
+                    WHERE d.deptype = 'e'
+                )`;
+	},
+	/**
+	 *
+	 * @param {String[]} schemas
+	 * @param {import("../models/serverVersion")} serverVersion
+	 */
+	getAggregates: function (schemas, serverVersion) {
+		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
+		return `SELECT p.proname, n.nspname, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes,
+				format('%s', array_to_string(
+					ARRAY[
+						format(E'\\tSFUNC = %s', a.aggtransfn::text)
+						, format(E'\\tSTYPE = %s', format_type(a.aggtranstype, NULL))	 
+						, format(E'\\tSSPACE = %s',a.aggtransspace)
+						, CASE a.aggfinalfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tFINALFUNC = %s',a.aggfinalfn::text) END	     
+						, CASE WHEN a.aggfinalfn != '-'::regproc AND a.aggfinalextra = true THEN format(E'\\tFINALFUNC_EXTRA') ELSE NULL END
+						${
+							core.checkServerCompatibility(serverVersion, 11, 0)
+								? `, CASE WHEN a.aggfinalfn != '-'::regproc THEN format(E'\\tFINALFUNC_MODIFY = %s', 
+							CASE 
+							 	WHEN a.aggfinalmodify = 'r' THEN 'READ_ONLY'
+							 	WHEN a.aggfinalmodify = 's' THEN 'SHAREABLE'
+							 	WHEN a.aggfinalmodify = 'w' THEN 'READ_WRITE'
+							END
+						) ELSE NULL END`
+								: ""
+						}
+						, CASE WHEN a.agginitval IS NULL THEN NULL ELSE format(E'\\tINITCOND = %s', a.agginitval) END
+						, format(E'\\tPARALLEL = %s', 
+							CASE 
+								WHEN p.proparallel = 'u' THEN 'UNSAFE'
+								WHEN p.proparallel = 's' THEN 'SAFE'
+								WHEN p.proparallel = 'r' THEN 'RESTRICTED'
+							END
+						) 	     
+						, CASE a.aggcombinefn WHEN '-'::regproc THEN NULL ELSE format(E'\\tCOMBINEFUNC = %s',a.aggcombinefn::text) END
+						, CASE a.aggserialfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tSERIALFUNC = %s',a.aggserialfn::text) END
+						, CASE a.aggdeserialfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tDESERIALFUNC = %s',a.aggdeserialfn::text) END
+						, CASE a.aggmtransfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tMSFUNC = %s',a.aggmtransfn::text) END
+						, case a.aggmtranstype WHEN '-'::regtype THEN NULL ELSE format(E'\\tMSTYPE = %s', format_type(a.aggmtranstype, NULL)) END
+						, case WHEN a.aggmfinalfn != '-'::regproc THEN format(E'\\tMSSPACE = %s',a.aggmtransspace) ELSE NULL END
+						, CASE a.aggminvtransfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tMINVFUNC = %s',a.aggminvtransfn::text) END
+						, CASE a.aggmfinalfn WHEN '-'::regproc THEN NULL ELSE format(E'\\tMFINALFUNC = %s',a.aggmfinalfn::text) END
+						, CASE WHEN a.aggmfinalfn != '-'::regproc and a.aggmfinalextra = true THEN format(E'\\tMFINALFUNC_EXTRA') ELSE NULL END
+						${
+							core.checkServerCompatibility(serverVersion, 11, 0)
+								? `, CASE WHEN a.aggmfinalfn != '-'::regproc THEN format(E'\\tMFINALFUNC_MODIFY  = %s', 
+							CASE 
+								WHEN a.aggmfinalmodify = 'r' THEN 'READ_ONLY'
+								WHEN a.aggmfinalmodify = 's' THEN 'SHAREABLE'
+								WHEN a.aggmfinalmodify = 'w' THEN 'READ_WRITE'
+							END
+					 	) ELSE NULL END`
+								: ""
+						}
+						, CASE WHEN a.aggminitval IS NULL THEN NULL ELSE format(E'\\tMINITCOND = %s', a.aggminitval) END
+						, CASE a.aggsortop WHEN 0 THEN NULL ELSE format(E'\\tSORTOP = %s', o.oprname) END		 
+					]
+					, E',\\n'
+					)
+				) as definition
+                FROM pg_proc p
+				INNER JOIN pg_namespace n ON n.oid = p.pronamespace
+				INNER JOIN pg_aggregate a on p.oid = a.aggfnoid 
+				LEFT JOIN pg_operator o ON o.oid = a.aggsortop
+				WHERE n.nspname IN ('${schemas.join("','")}')
+				AND a.aggkind = 'n'
+				${core.checkServerCompatibility(serverVersion, 11, 0) ? " AND p.prokind = 'a' " : " AND p.proisagg = true AND p.proiswindow = false "} 
+				AND p."oid" NOT IN (
                     SELECT d.objid 
                     FROM pg_depend d
                     WHERE d.deptype = 'e'
@@ -521,6 +595,43 @@ class CatalogApi {
 						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
 					)
 						result[fullProcedureName].privileges[privilege.usename] = {
+							execute: privilege.execute,
+						};
+				});
+			})
+		);
+
+		return result;
+	}
+
+	/**
+	 *
+	 * @param {import("pg").Client} client
+	 * @param {import("../models/config")} config
+	 */
+	static async retrieveAggregates(client, config) {
+		let result = {};
+
+		const aggregates = await client.query(query.getAggregates(config.compareOptions.schemaCompare.namespaces, client.version));
+
+		await Promise.all(
+			aggregates.rows.map(async (aggregate) => {
+				let fullAggregateName = `"${aggregate.nspname}"."${aggregate.proname}"`;
+				result[fullAggregateName] = {
+					definition: aggregate.definition,
+					owner: aggregate.owner,
+					argTypes: aggregate.argtypes,
+					privileges: {},
+				};
+
+				let privileges = await client.query(query.getFunctionPrivileges(aggregate.nspname, aggregate.proname, aggregate.argtypes));
+
+				privileges.rows.forEach((privilege) => {
+					if (
+						config.compareOptions.schemaCompare.roles.length <= 0 ||
+						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+					)
+						result[fullAggregateName].privileges[privilege.usename] = {
 							execute: privilege.execute,
 						};
 				});
