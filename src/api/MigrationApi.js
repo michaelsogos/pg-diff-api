@@ -10,19 +10,21 @@ class MigrationApi {
 	 *
 	 * @param {import("../models/config")} config
 	 * @param {Boolean} force
+	 * @param {Boolean} toSourceClient
 	 * @param {import("events")} eventEmitter
 	 * @returns {Promise<import("../models/patchInfo")[]>}
 	 */
-	static async migrate(config, force, eventEmitter) {
+	static async migrate(config, force, toSourceClient, eventEmitter) {
 		eventEmitter.emit("migrate", "Migration started", 0);
 
 		let migrationConfig = core.prepareMigrationConfig(config);
 
-		eventEmitter.emit("migrate", "Connecting to target database ...", 20);
-		let pgClient = await core.makePgClient(config.targetClient);
+		eventEmitter.emit("migrate", "Connecting to database ...", 20);
+		let clientConfig = toSourceClient ? config.sourceClient : config.targetClient;
+		let pgClient = await core.makePgClient(clientConfig);
 		eventEmitter.emit(
 			"migrate",
-			`Connected to target PostgreSQL ${pgClient.version.version} on [${config.targetClient.host}:${config.targetClient.port}/${config.targetClient.database}] `,
+			`Connected to PostgreSQL ${pgClient.version.version} on [${clientConfig.host}:${clientConfig.port}/${clientConfig.database}] `,
 			25
 		);
 
