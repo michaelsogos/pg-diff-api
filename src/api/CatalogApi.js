@@ -175,13 +175,14 @@ const query = {
 	 *
 	 * @param {String[]} schemas
 	 */
-	getFunctions: function (schemas) {
+	getFunctions: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
 		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes
                 FROM pg_proc p
                 INNER JOIN pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL AND p.prokind = 'f'
-                AND p."oid" NOT IN (
+				WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL ${
+			core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind = 'f'" : "AND p.proisagg = false AND p.proiswindow = false"
+		} AND p."oid" NOT IN (
                     SELECT d.objid 
                     FROM pg_depend d
                     WHERE d.deptype = 'e'
@@ -500,7 +501,7 @@ class CatalogApi {
 	static async retrieveFunctions(client, config) {
 		let result = {};
 
-		const procedures = await client.query(query.getFunctions(config.compareOptions.schemaCompare.namespaces));
+		const procedures = await client.query(query.getFunctions(config.compareOptions.schemaCompare.namespaces, client.version));
 
 		await Promise.all(
 			procedures.rows.map(async (procedure) => {

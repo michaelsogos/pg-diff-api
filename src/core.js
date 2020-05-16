@@ -119,11 +119,11 @@ class core {
 	}
 
 	/**
-	 *
+	 * Check the server version
 	 * @param {import("./models/serverVersion")} serverVersion
 	 * @param {Number} majorVersion
 	 * @param {Number} minorVersion
-	 * @returns {Boolean}
+	 * @returns {Boolean} Return true if connected server has greater or equal version
 	 */
 	static checkServerCompatibility(serverVersion, majorVersion, minorVersion) {
 		if (serverVersion != null && serverVersion.major >= majorVersion && serverVersion.minor >= minorVersion) return true;
