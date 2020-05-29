@@ -421,7 +421,7 @@ var helper = {
 			privileges = privileges.concat(this.__generateProcedureGrantsDefinition(aggregate, schema.argTypes, role, schema.privileges[role]));
 		}
 
-		let script = `\nCREATE AGGREGATE ${aggregate} (${schema.argTypes}) (${schema.definition});\n${privileges.join("\n")}\n`;
+		let script = `\nCREATE AGGREGATE ${aggregate} (${schema.argTypes}) (\n${schema.definition}\n);\n${privileges.join("\n")}\n`;
 		return script;
 	},
 	/**

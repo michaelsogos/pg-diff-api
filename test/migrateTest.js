@@ -3,7 +3,7 @@ const Config = require("../src/index").Config;
 
 Config.migrationOptions.historyTableName = "test_migrations";
 Config.targetClient.database = "pgdiff_test";
-Config.targetClient.password = "f";
+Config.targetClient.password = "postgres";
 Config.migrationOptions.patchesDirectory = ".\\test\\patches";
 
 var pgDiff = new PgDiff(Config);
