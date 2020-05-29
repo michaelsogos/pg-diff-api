@@ -725,8 +725,8 @@ class CompareApi {
 				//TODO: Is correct that if definition is different automatically GRANTS and OWNER will not be updated also?
 				//TODO: Better to match only "visible" char in order to avoid special invisible like \t, spaces, etc;
 				//      the problem is that a SQL STRING can contains special char as a fix from previous function version
-				let sourceFunctionDefinition = sourceFunctions[procedure].definition.replace(/\r/g);
-				let targetFunctionDefinition = targetFunctions[procedure].definition.replace(/\r/g);
+				let sourceFunctionDefinition = sourceFunctions[procedure].definition.replace(/\r/g, "");
+				let targetFunctionDefinition = targetFunctions[procedure].definition.replace(/\r/g, "");
 				if (sourceFunctionDefinition != targetFunctionDefinition) {
 					sqlScript.push(sql.generateChangeProcedureScript(procedure, sourceFunctions[procedure]));
 				} else {
