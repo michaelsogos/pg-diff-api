@@ -600,7 +600,9 @@ class CompareApi {
 				//View exists on both database, then compare view schema
 				actionLabel = "ALTER";
 
-				if (sourceViews[view].definition != targetViews[view].definition) {
+				let sourceViewDefinition = sourceViews[view].definition.replace(/\r/g);
+				let targetViewDefinition = targetViews[view].definition.replace(/\r/g);
+				if (sourceViewDefinition != targetViewDefinition) {
 					if (!droppedViews.includes(view)) sqlScript.push(sql.generateDropViewScript(view));
 					sqlScript.push(sql.generateCreateViewScript(view, sourceViews[view]));
 				} else {
@@ -655,7 +657,9 @@ class CompareApi {
 				//Materialized view exists on both database, then compare materialized view schema
 				actionLabel = "ALTER";
 
-				if (sourceMaterializedViews[view].definition != targetMaterializedViews[view].definition) {
+				let sourceViewDefinition = sourceMaterializedViews[view].definition.replace(/\r/g);
+				let targetViewDefinition = targetMaterializedViews[view].definition.replace(/\r/g);
+				if (sourceViewDefinition != targetViewDefinition) {
 					if (!droppedViews.includes(view)) sqlScript.push(sql.generateDropMaterializedViewScript(view));
 					sqlScript.push(sql.generateCreateMaterializedViewScript(view, sourceMaterializedViews[view]));
 				} else {
@@ -719,7 +723,11 @@ class CompareApi {
 				actionLabel = "ALTER";
 
 				//TODO: Is correct that if definition is different automatically GRANTS and OWNER will not be updated also?
-				if (sourceFunctions[procedure].definition != targetFunctions[procedure].definition) {
+				//TODO: Better to match only "visible" char in order to avoid special invisible like \t, spaces, etc;
+				//      the problem is that a SQL STRING can contains special char as a fix from previous function version
+				let sourceFunctionDefinition = sourceFunctions[procedure].definition.replace(/\r/g, "");
+				let targetFunctionDefinition = targetFunctions[procedure].definition.replace(/\r/g, "");
+				if (sourceFunctionDefinition != targetFunctionDefinition) {
 					sqlScript.push(sql.generateChangeProcedureScript(procedure, sourceFunctions[procedure]));
 				} else {
 					sqlScript.push(
