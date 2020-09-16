@@ -591,12 +591,14 @@ var helper = {
 		switch (dataTypeCategory) {
 			case "D": //DATE TIME
 				return `'${value.toISOString()}'`;
-			case "A": //ARRAY
-			case "R": //RANGE
 			case "V": //BIT
 			case "S": //STRING
 				return `'${value.replace(/'/g, "''")}'`;
 			// return `'${value}'`;
+			case "A": //ARRAY
+				return `'{${value.join()}}'`;
+			case "R": //RANGE
+				return `'${value}'`;
 			case "B": //BOOL
 			case "E": //ENUM
 			case "G": //GEOMETRIC

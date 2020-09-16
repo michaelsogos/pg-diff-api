@@ -1072,6 +1072,17 @@ class CompareApi {
 
 		if (!isNewTable) {
 			let fullTableName = `"${tableDefinition.tableSchema || "public"}"."${tableDefinition.tableName}"`;
+
+			let misssingKeyField = "";
+			let missingKeyColumns = tableDefinition.tableKeyFields.some((k) => {
+				if (!Object.keys(dbObjects.tables[fullTableName].columns).includes(`"${k}"`)) {
+					misssingKeyField = k;
+					return true;
+				}
+			});
+
+			if (missingKeyColumns) throw new Error(`The table [${fullTableName}] doesn't contains the field [${misssingKeyField}]`);
+
 			let response = await client.query(
 				`SELECT MD5(ROW(${tableDefinition.tableKeyFields.join(",")})::text) AS "rowHash", * FROM ${fullTableName}`
 			);
