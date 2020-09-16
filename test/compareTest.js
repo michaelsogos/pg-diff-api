@@ -8,8 +8,10 @@ Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
 Config.compareOptions.outputDirectory = ".\\test\\patches";
 // Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
-Config.compareOptions.dataCompare.enable = false;
+Config.compareOptions.dataCompare.enable = true;
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id"]));
+Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
+Config.compareOptions.dataCompare.tables.push(new TableDefinition("diff_test", ["id"]));
 
 var pgDiff = new PgDiff(Config);
 pgDiff.events.on("compare", (message, percentage) => {
