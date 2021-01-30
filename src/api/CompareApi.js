@@ -1352,7 +1352,7 @@ class CompareApi {
 				file.on("error", reject);
 
 				file.on("finish", () => {
-					eventEmitter.emit("compare", "Patch file have been created", 95);
+					eventEmitter.emit("compare", "Patch file have been created", 99);
 					resolve(scriptPath);
 				});
 

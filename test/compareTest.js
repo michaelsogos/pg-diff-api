@@ -8,6 +8,7 @@ Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
 Config.compareOptions.outputDirectory = ".\\test\\patches";
 // Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
+Config.compareOptions.schemaCompare.namespaces = ["public", "schema_one"];
 Config.compareOptions.dataCompare.enable = true;
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
