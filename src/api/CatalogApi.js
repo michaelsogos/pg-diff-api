@@ -15,8 +15,9 @@ const query = {
 	 */
 	getTables: function (schemas) {
 		return `SELECT schemaname, tablename, tableowner 
-                FROM pg_tables t
-                INNER JOIN pg_class c on t.tablename::regclass = c.oid 
+				FROM pg_tables t
+				INNER JOIN pg_namespace n ON t.schemaname = n.nspname 
+                INNER JOIN pg_class c ON t.tablename = c.relname AND c.relnamespace = n."oid" 
                 WHERE t.schemaname IN ('${schemas.join("','")}')
                 AND c.oid NOT IN (
                     SELECT d.objid 
@@ -28,17 +29,18 @@ const query = {
 	 *
 	 * @param {String} tableName
 	 */
-	getTableOptions: function (tableName) {
-		//TODO: Instead of using ::regnamespace casting, for better performance join with pg_namespace
-		return `SELECT relhasoids FROM pg_class WHERE oid = '${tableName}'::regclass`;
+	getTableOptions: function (schemaName, tableName) {
+		return `SELECT relhasoids 
+				FROM pg_class c
+				INNER JOIN pg_namespace n ON n."oid" = c.relnamespace AND n.nspname = '${schemaName}'
+				WHERE c.relname = '${tableName}'`;
 	},
 	/**
 	 *
 	 * @param {String} tableName
 	 * @param {import("../models/serverVersion")} serverVersion
 	 */
-	getTableColumns: function (tableName, serverVersion) {
-		//TODO: Instead of using ::regclass casting, for better performance join with pg_class
+	getTableColumns: function (schemaName, tableName, serverVersion) {
 		return `SELECT a.attname, a.attnotnull, t.typname, t.oid as typeid, t.typcategory, pg_get_expr(ad.adbin ,ad.adrelid ) as adsrc, ${
 			core.checkServerCompatibility(serverVersion, 10, 0) ? "a.attidentity" : "NULL as attidentity"
 		},
@@ -53,19 +55,22 @@ const query = {
                 END AS scale 	
                 FROM pg_attribute a
                 INNER JOIN pg_type t ON t.oid = a.atttypid
-                LEFT JOIN pg_attrdef ad on ad.adrelid = a.attrelid AND a.attnum = ad.adnum
-                WHERE attrelid = '${tableName}'::regclass AND attnum > 0 AND attisdropped = false
-                ORDER BY a.attnum ASC`;
+				LEFT JOIN pg_attrdef ad on ad.adrelid = a.attrelid AND a.attnum = ad.adnum
+				INNER JOIN pg_namespace n ON n.nspname = '${schemaName}'
+				INNER JOIN pg_class c ON c.relname = '${tableName}' AND c.relnamespace = n."oid"
+                WHERE attrelid = c."oid" AND attnum > 0 AND attisdropped = false
+				ORDER BY a.attnum ASC`;
 	},
 	/**
 	 *
 	 * @param {String} tableName
 	 */
-	getTableConstraints: function (tableName) {
-		//TODO: Instead of using ::regclass casting, for better performance join with pg_class
+	getTableConstraints: function (schemaName, tableName) {
 		return `SELECT conname, contype, pg_get_constraintdef(c.oid) as definition
-                FROM pg_constraint c
-                WHERE c.conrelid = '${tableName}'::regclass`;
+				FROM pg_constraint c
+				INNER JOIN pg_namespace n ON n.nspname = '${schemaName}'
+                INNER JOIN pg_class cl ON cl.relname ='${tableName}' AND cl.relnamespace = n.oid
+				WHERE c.conrelid = cl.oid`;
 	},
 	/**
 	 *
@@ -73,12 +78,12 @@ const query = {
 	 * @param {String} tableName
 	 */
 	getTableIndexes: function (schemaName, tableName) {
-		//TODO: Instead of using ::regnamespace casting, for better performance join with pg_namespace
 		return `SELECT idx.relname as indexname, pg_get_indexdef(idx.oid) AS indexdef
                 FROM pg_index i
-                INNER JOIN pg_class tbl ON tbl.oid = i.indrelid
+				INNER JOIN pg_class tbl ON tbl.oid = i.indrelid
+				INNER JOIN pg_namespace tbln ON tbl.relnamespace = tbln.oid
                 INNER JOIN pg_class idx ON idx.oid = i.indexrelid
-                WHERE tbl.relnamespace = '"${schemaName}"'::regnamespace::oid and tbl.relname='${tableName}' and i.indisprimary = false`;
+				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false`;
 	},
 	/**
 	 *
@@ -104,7 +109,8 @@ const query = {
 	getViews: function (schemas) {
 		return `SELECT schemaname, viewname, viewowner, definition 
                 FROM pg_views v
-                INNER JOIN pg_class c on v.viewname::regclass = c.oid 
+				INNER JOIN pg_namespace n ON v.schemaname = n.nspname 
+				INNER JOIN pg_class c ON v.viewname = c.relname AND c.relnamespace = n."oid" 								
                 WHERE v.schemaname IN ('${schemas.join("','")}')
                 AND c.oid NOT IN (
                     SELECT d.objid 
@@ -159,7 +165,6 @@ const query = {
 	 * @param {String} viewName
 	 */
 	getViewDependencies: function (schemaName, viewName) {
-		//TODO: Instead of using ::regclass casting, for better performance join with pg_class
 		return `SELECT                 
                 n.nspname AS schemaname,
                 c.relname AS tablename,
@@ -168,8 +173,10 @@ const query = {
                 INNER JOIN pg_depend AS d ON r.oid=d.objid
                 INNER JOIN pg_attribute a ON a.attnum = d.refobjsubid AND a.attrelid = d.refobjid AND a.attisdropped = false
                 INNER JOIN pg_class c ON c.oid = d.refobjid
-                INNER JOIN pg_namespace n ON n.oid = c.relnamespace                
-                WHERE r.ev_class='"${schemaName}"."${viewName}"'::regclass::oid AND d.refobjid <> '"${schemaName}"."${viewName}"'::regclass::oid`;
+				INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+				INNER JOIN pg_namespace vn ON vn.nspname = '${schemaName}'
+                INNER JOIN pg_class vc ON vc.relname = '${viewName}' AND vc.relnamespace = vn."oid" 
+				WHERE r.ev_class = vc.oid AND d.refobjid <> vc.oid`;
 	},
 	/**
 	 *
@@ -269,11 +276,11 @@ const query = {
 	 * @param {String} argTypes
 	 */
 	getFunctionPrivileges: function (schemaName, functionName, argTypes) {
-		//TODO: Instead of using ::regnamespace casting, for better performance join with pg_namespace
-		return `SELECT p.pronamespace::regnamespace::name, p.proname, u.usename, 
+		return `SELECT n.nspname as pronamespace, p.proname, u.usename, 
                 HAS_FUNCTION_PRIVILEGE(u.usename,'"${schemaName}"."${functionName}"(${argTypes})','EXECUTE') as execute  
-                FROM pg_proc p, pg_user u 
-                WHERE p.proname='${functionName}' AND p.pronamespace::regnamespace = '"${schemaName}"'::regnamespace`;
+				FROM pg_proc p, pg_user u 
+                INNER JOIN pg_namespace n ON n.nspname = '${schemaName}' 				
+				WHERE p.proname='${functionName}' AND p.pronamespace = n.oid`;
 	},
 	/**
 	 *
@@ -286,12 +293,13 @@ const query = {
 		}
                 FROM (
                     SELECT   
-                        c.oid, ns.nspname AS seq_nspname, c.relname AS seq_name, r.rolname as owner, d.refobjid::regclass AS ownedby_table, a.attname AS ownedby_column	    
+                        c.oid, ns.nspname AS seq_nspname, c.relname AS seq_name, r.rolname as owner, sc.relname AS ownedby_table, a.attname AS ownedby_column	    
                     FROM pg_class c
                     INNER JOIN pg_namespace ns ON ns.oid = c.relnamespace 
                     INNER JOIN pg_roles r ON r.oid = c.relowner 
                     INNER JOIN pg_depend d ON d.objid = c.oid AND d.refobjsubid > 0 AND d.deptype ='a'
-                    INNER JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid	
+					INNER JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid	
+					INNER JOIN pg_class sc ON sc."oid" = d.refobjid
                     WHERE c.relkind = 'S' AND ns.nspname IN ('${schemas.join("','")}') ${
 			core.checkServerCompatibility(serverVersion, 10, 0) ? "AND a.attidentity = ''" : ""
 		}  	
@@ -361,7 +369,7 @@ class CatalogApi {
 					owner: table.tableowner,
 				};
 
-				const columns = await client.query(query.getTableColumns(fullTableName, client.version));
+				const columns = await client.query(query.getTableColumns(table.schemaname, table.tablename, client.version));
 				columns.rows.forEach((column) => {
 					let columnName = `"${column.attname}"`;
 					let columnIdentity = null;
@@ -397,7 +405,7 @@ class CatalogApi {
 					};
 				});
 
-				let constraints = await client.query(query.getTableConstraints(fullTableName));
+				let constraints = await client.query(query.getTableConstraints(table.schemaname, table.tablename));
 				constraints.rows.forEach((constraint) => {
 					let constraintName = `"${constraint.conname}"`;
 					result[fullTableName].constraints[constraintName] = {
@@ -408,7 +416,7 @@ class CatalogApi {
 
 				//@mso -> relhadoids has been deprecated from PG v12.0
 				if (!core.checkServerCompatibility(client.version, 12, 0)) {
-					let options = await client.query(query.getTableOptions(fullTableName));
+					let options = await client.query(query.getTableOptions(table.schemaname, table.tablename));
 					options.rows.forEach((option) => {
 						result[fullTableName].options = {
 							withOids: option.relhasoids,
