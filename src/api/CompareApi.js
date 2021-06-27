@@ -1347,7 +1347,11 @@ class CompareApi {
 
 		const now = new Date();
 		const fileName = `${now.toISOString().replace(/[-:.TZ]/g, "")}_${scriptName}.sql`;
-		const scriptPath = path.resolve(process.cwd(), config.compareOptions.outputDirectory, fileName);
+
+		if (typeof config.compareOptions.outputDirectory !== "string" && !(config.compareOptions.outputDirectory instanceof String))
+			config.compareOptions.outputDirectory = "";
+
+		const scriptPath = path.resolve(config.compareOptions.outputDirectory || "", fileName);
 		if (config.compareOptions.getAuthorFromGit) {
 			config.compareOptions.author = await core.getGitAuthor();
 		}
