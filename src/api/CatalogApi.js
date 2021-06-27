@@ -5,6 +5,17 @@ const query = {
 	 *
 	 * @param {String[]} schemas
 	 */
+	getAllSchemas: function () {
+		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
+		return `SELECT nspname FROM pg_namespace 
+					WHERE nspname NOT IN ('pg_catalog','information_schema')
+					AND nspname NOT LIKE 'pg_toast%'
+					AND nspname NOT LIKE 'pg_temp%'`;
+	},
+	/**
+	 *
+	 * @param {String[]} schemas
+	 */
 	getSchemas: function (schemas) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
 		return `SELECT nspname, nspowner::regrole::name as owner FROM pg_namespace WHERE nspname IN ('${schemas.join("','")}')`;
@@ -331,9 +342,28 @@ class CatalogApi {
 	 * @param {import("pg").Client} client
 	 * @param {String[]} schemas
 	 */
+	static async retrieveAllSchemas(client) {
+		/** @type {String[]} */
+		let result = [];
+		/** @type {import("pg").QueryResult<any>} */
+		const namespaces = await client.query(query.getAllSchemas());
+
+		await Promise.all(
+			namespaces.rows.map(async (namespace) => {
+				result.push(namespace.nspname);
+			})
+		);
+
+		return result;
+	}
+
+	/**
+	 *
+	 * @param {import("pg").Client} client
+	 * @param {String[]} schemas
+	 */
 	static async retrieveSchemas(client, schemas) {
 		let result = {};
-
 		const namespaces = await client.query(query.getSchemas(schemas));
 
 		await Promise.all(
