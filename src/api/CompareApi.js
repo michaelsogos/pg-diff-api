@@ -90,6 +90,15 @@ class CompareApi {
 	static async collectSchemaObjects(client, config) {
 		var dbObjects = new DatabaseObjects();
 
+		if (typeof config.compareOptions.schemaCompare.namespaces === "string" || config.compareOptions.schemaCompare.namespaces instanceof String)
+			config.compareOptions.schemaCompare.namespaces = [config.compareOptions.schemaCompare.namespaces];
+		else if (
+			!config.compareOptions.schemaCompare.namespaces ||
+			!Array.isArray(config.compareOptions.schemaCompare.namespaces) ||
+			config.compareOptions.schemaCompare.namespaces.length <= 0
+		)
+			config.compareOptions.schemaCompare.namespaces = await catalogApi.retrieveAllSchemas(client);
+
 		dbObjects.schemas = await catalogApi.retrieveSchemas(client, config.compareOptions.schemaCompare.namespaces);
 		dbObjects.tables = await catalogApi.retrieveTables(client, config);
 		dbObjects.views = await catalogApi.retrieveViews(client, config);
@@ -1338,7 +1347,11 @@ class CompareApi {
 
 		const now = new Date();
 		const fileName = `${now.toISOString().replace(/[-:.TZ]/g, "")}_${scriptName}.sql`;
-		const scriptPath = path.resolve(process.cwd(), config.compareOptions.outputDirectory, fileName);
+
+		if (typeof config.compareOptions.outputDirectory !== "string" && !(config.compareOptions.outputDirectory instanceof String))
+			config.compareOptions.outputDirectory = "";
+
+		const scriptPath = path.resolve(config.compareOptions.outputDirectory || "", fileName);
 		if (config.compareOptions.getAuthorFromGit) {
 			config.compareOptions.author = await core.getGitAuthor();
 		}

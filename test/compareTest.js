@@ -2,13 +2,13 @@ const PgDiff = require("../src/index").PgDiff;
 const Config = require("../src/index").Config;
 const TableDefinition = require("../src/models/tableDefinition");
 
-Config.targetClient.database = "pgdiff_test";
-Config.sourceClient.database = "pgdiff_test_2";
+Config.targetClient.database = "pg_diff_test2";
+Config.sourceClient.database = "pg_diff_test1";
 Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
-Config.compareOptions.outputDirectory = ".\\test\\patches";
+Config.compareOptions.outputDirectory = 1;
 // Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
-Config.compareOptions.schemaCompare.namespaces = ["public", "schema_one"];
+Config.compareOptions.schemaCompare.namespaces = []; //["public", "schema_one"];
 Config.compareOptions.dataCompare.enable = true;
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
@@ -25,7 +25,7 @@ pgDiff
 		else console.log(`The patch "${result}" has been created.`);
 	})
 	.catch((err) => {
-		console.error(`ERROR: ${err.message}\r\n${err.stack}`);
+		console.error(`ERROR: ${err.message}\n${err.stack}`);
 	})
 	.finally(() => {
 		process.exit(0);
