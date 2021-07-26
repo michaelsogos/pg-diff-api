@@ -443,7 +443,7 @@ class CompareApi {
 			for (let view in dbTargetObjects.views) {
 				dbTargetObjects.views[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
-					if (fullDependencyName == tableName && dependency.columnName == columnName) {
+					if (fullDependencyName == tableName && dependency.columnName == rawColumnName) {
 						sqlScript.push(sql.generateDropViewScript(view));
 						droppedViews.push(view);
 					}
@@ -454,7 +454,7 @@ class CompareApi {
 			for (let view in dbTargetObjects.materializedViews) {
 				dbTargetObjects.materializedViews[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
-					if (fullDependencyName == tableName && dependency.columnName == columnName) {
+					if (fullDependencyName == tableName && dependency.columnName == rawColumnName) {
 						sqlScript.push(sql.generateDropMaterializedViewScript(view));
 						droppedViews.push(view);
 					}
