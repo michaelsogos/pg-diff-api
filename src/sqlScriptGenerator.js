@@ -1,3 +1,5 @@
+const objectType = require("./enums/objectType");
+
 const hints = {
 	addColumnNotNullableWithoutDefaultValue:
 		" --WARN: Add a new column not nullable without a default value can occure in a sql error during execution!",
@@ -98,6 +100,19 @@ var helper = {
 	},
 	/**
 	 *
+	 * @param {String} objectType
+	 * @param {String} objectName
+	 * @param {String} comment
+	 * @param {String} parentObjectName
+	 */
+	generateChangeCommentScript: function (objectType, objectName, comment, parentObjectName = null) {
+		const description = comment ? `'${comment}'` : "NULL";
+		const parentObject = parentObjectName ? `ON ${parentObjectName}` : "";
+		let script = `\nCOMMENT ON ${objectType} ${objectName} ${parentObject} IS ${description};\n`;
+		return script;
+	},
+	/**
+	 *
 	 * @param {String} schema
 	 * @param {String} owner
 	 */
@@ -151,9 +166,27 @@ var helper = {
 			privileges = privileges.concat(this.__generateTableGrantsDefinition(table, role, schema.privileges[role]));
 		}
 
+		let columnsComment = [];
+		for (let column in schema.columns) {
+			columnsComment.push(this.generateChangeCommentScript(objectType.COLUMN, `${table}.${column}`, schema.columns[column].comment));
+		}
+
+		let constraintsComment = [];
+		for (let constraint in schema.constraints) {
+			constraintsComment.push(
+				this.generateChangeCommentScript(objectType.CONSTRAINT, constraint, schema.constraints[constraint].comment, table)
+			);
+		}
+
+		let indexesComment = [];
+		for (let index in schema.indexes) {
+			indexesComment.push(this.generateChangeCommentScript(objectType.INDEX, index, schema.indexes[index].comment));
+		}
+
 		let script = `\nCREATE TABLE IF NOT EXISTS ${table} (\n\t${columns.join(",\n\t")}\n)${options};\n${indexes.join("\n")}\n${privileges.join(
 			"\n"
-		)}\n`;
+		)}\n${columnsComment.join("\n")}${constraintsComment.join("\n")}${indexesComment.join("\n")}`;
+
 		return script;
 	},
 	/**
@@ -445,17 +478,19 @@ var helper = {
 	/**
 	 *
 	 * @param {String} procedure
+	 * @param {String} procedureArgs
 	 */
-	generateDropProcedureScript: function (procedure) {
-		let script = `\nDROP FUNCTION IF EXISTS ${procedure};\n`;
+	generateDropProcedureScript: function (procedure, procedureArgs) {
+		let script = `\nDROP FUNCTION IF EXISTS ${procedure}(${procedureArgs});\n`;
 		return script;
 	},
 	/**
 	 *
 	 * @param {String} aggregate
+	 * @param {String} aggregateArgs
 	 */
-	generateDropAggregateScript: function (aggregate) {
-		let script = `\nDROP AGGREGATE IF EXISTS ${aggregate};\n`;
+	generateDropAggregateScript: function (aggregate, aggregateArgs) {
+		let script = `\nDROP AGGREGATE IF EXISTS ${aggregate}(${aggregateArgs});\n`;
 		return script;
 	},
 	/**
