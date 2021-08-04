@@ -328,7 +328,7 @@ const query = {
                     LEFT JOIN pg_depend d ON d.objid = c.oid AND d.refobjsubid > 0 AND d.deptype ='a'
 					LEFT JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid	
 					LEFT JOIN pg_class sc ON sc."oid" = d.refobjid
-					LEFT JOIN pg_description ds ON ds.objoid = c."oid" AND d.objsubid = 0
+					LEFT JOIN pg_description ds ON ds.objoid = c."oid" AND ds.objsubid = 0
                     WHERE c.relkind = 'S' AND ns.nspname IN ('${schemas.join("','")}') 
 					${core.checkServerCompatibility(serverVersion, 10, 0) ? "AND (a.attidentity IS NULL OR a.attidentity = '')" : ""}
                 ) s, LATERAL pg_sequence_parameters(s.oid) p`;

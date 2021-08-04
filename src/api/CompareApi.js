@@ -1050,7 +1050,7 @@ class CompareApi {
 		for (let property in sourceSequenceDefinition) {
 			//Get new or changed properties
 
-			if (property == "privileges" || property == "ownedBy" || property == "name")
+			if (property == "privileges" || property == "ownedBy" || property == "name" || property == "comment")
 				//skip these properties from compare
 				continue;
 
