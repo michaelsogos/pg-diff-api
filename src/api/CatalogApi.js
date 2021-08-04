@@ -18,17 +18,21 @@ const query = {
 	 */
 	getSchemas: function (schemas) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
-		return `SELECT nspname, nspowner::regrole::name as owner FROM pg_namespace WHERE nspname IN ('${schemas.join("','")}')`;
+		return `SELECT n.nspname, n.nspowner::regrole::name as owner, d.description as comment
+				FROM pg_namespace n
+				LEFT JOIN pg_description d ON d.objoid = n."oid" AND d.objsubid = 0
+				WHERE nspname IN ('${schemas.join("','")}')`;
 	},
 	/**
 	 *
 	 * @param {String[]} schemas
 	 */
 	getTables: function (schemas) {
-		return `SELECT schemaname, tablename, tableowner 
+		return `SELECT t.schemaname, t.tablename, t.tableowner, d.description as comment
 				FROM pg_tables t
 				INNER JOIN pg_namespace n ON t.schemaname = n.nspname 
                 INNER JOIN pg_class c ON t.tablename = c.relname AND c.relnamespace = n."oid" 
+				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = 0
                 WHERE t.schemaname IN ('${schemas.join("','")}')
                 AND c.oid NOT IN (
                     SELECT d.objid 
@@ -63,12 +67,14 @@ const query = {
                 CASE
                     WHEN t.typname = 'numeric' AND a.atttypmod > 0 THEN (a.atttypmod-4) & 65535
                     ELSE null
-                END AS scale 	
+                END AS scale,
+				d.description AS comment
                 FROM pg_attribute a
                 INNER JOIN pg_type t ON t.oid = a.atttypid
 				LEFT JOIN pg_attrdef ad on ad.adrelid = a.attrelid AND a.attnum = ad.adnum
 				INNER JOIN pg_namespace n ON n.nspname = '${schemaName}'
 				INNER JOIN pg_class c ON c.relname = '${tableName}' AND c.relnamespace = n."oid"
+				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = a.attnum
                 WHERE attrelid = c."oid" AND attnum > 0 AND attisdropped = false
 				ORDER BY a.attnum ASC`;
 	},
@@ -77,10 +83,11 @@ const query = {
 	 * @param {String} tableName
 	 */
 	getTableConstraints: function (schemaName, tableName) {
-		return `SELECT conname, contype, pg_get_constraintdef(c.oid) as definition
+		return `SELECT c.conname, c.contype, pg_get_constraintdef(c.oid) as definition, d.description AS comment
 				FROM pg_constraint c
 				INNER JOIN pg_namespace n ON n.nspname = '${schemaName}'
                 INNER JOIN pg_class cl ON cl.relname ='${tableName}' AND cl.relnamespace = n.oid
+				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = 0
 				WHERE c.conrelid = cl.oid`;
 	},
 	/**
@@ -89,11 +96,12 @@ const query = {
 	 * @param {String} tableName
 	 */
 	getTableIndexes: function (schemaName, tableName) {
-		return `SELECT idx.relname as indexname, pg_get_indexdef(idx.oid) AS indexdef
+		return `SELECT idx.relname as indexname, pg_get_indexdef(idx.oid) AS indexdef, d.description AS comment
                 FROM pg_index i
 				INNER JOIN pg_class tbl ON tbl.oid = i.indrelid
 				INNER JOIN pg_namespace tbln ON tbl.relnamespace = tbln.oid
                 INNER JOIN pg_class idx ON idx.oid = i.indexrelid
+				LEFT JOIN pg_description d ON d.objoid = idx."oid" AND d.objsubid = 0
 				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false`;
 	},
 	/**
@@ -118,10 +126,11 @@ const query = {
 	 * @param {String[]} schemas
 	 */
 	getViews: function (schemas) {
-		return `SELECT schemaname, viewname, viewowner, definition 
+		return `SELECT v.schemaname, v.viewname, v.viewowner, v.definition, d.description AS comment 
                 FROM pg_views v
 				INNER JOIN pg_namespace n ON v.schemaname = n.nspname 
-				INNER JOIN pg_class c ON v.viewname = c.relname AND c.relnamespace = n."oid" 								
+				INNER JOIN pg_class c ON v.viewname = c.relname AND c.relnamespace = n."oid" 
+				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = 0
                 WHERE v.schemaname IN ('${schemas.join("','")}')
                 AND c.oid NOT IN (
                     SELECT d.objid 
@@ -151,7 +160,12 @@ const query = {
 	 * @param {String[]} schemas
 	 */
 	getMaterializedViews: function (schemas) {
-		return `SELECT schemaname, matviewname, matviewowner, definition FROM pg_matviews WHERE schemaname IN ('${schemas.join("','")}')`;
+		return `SELECT m.schemaname, m.matviewname, m.matviewowner, m.definition, d.description AS comment
+				FROM pg_matviews m
+				INNER JOIN pg_namespace n ON m.schemaname = n.nspname 
+				INNER JOIN pg_class c ON m.matviewname = c.relname AND c.relnamespace = n."oid" 
+				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = 0
+				WHERE schemaname IN ('${schemas.join("','")}')`;
 	},
 	/**
 	 *
@@ -196,16 +210,17 @@ const query = {
 	 */
 	getFunctions: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
-		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes
-                FROM pg_proc p
-                INNER JOIN pg_namespace n ON n.oid = p.pronamespace
-				WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL ${
-			core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind = 'f'" : "AND p.proisagg = false AND p.proiswindow = false"
-		} AND p."oid" NOT IN (
-                    SELECT d.objid 
-                    FROM pg_depend d
-                    WHERE d.deptype = 'e'
-                )`;
+		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes, d.description AS comment
+				FROM pg_proc p
+				INNER JOIN pg_namespace n ON n.oid = p.pronamespace
+				LEFT JOIN pg_description d ON d.objoid = p."oid" AND d.objsubid = 0
+				WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL 
+				${core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind = 'f'" : "AND p.proisagg = false AND p.proiswindow = false"} 
+				AND p."oid" NOT IN (
+					SELECT d.objid 
+					FROM pg_depend d
+					WHERE d.deptype = 'e'
+				)`;
 	},
 	/**
 	 *
@@ -214,7 +229,7 @@ const query = {
 	 */
 	getAggregates: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
-		return `SELECT p.proname, n.nspname, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes,
+		return `SELECT p.proname, n.nspname, p.proowner::regrole::name as owner, oidvectortypes(p.proargtypes) as argtypes,
 				format('%s', array_to_string(
 					ARRAY[
 						format(E'\\tSFUNC = %s', a.aggtransfn::text)
@@ -266,11 +281,13 @@ const query = {
 					]
 					, E',\\n'
 					)
-				) as definition
-                FROM pg_proc p
+				) as definition,
+				d.description AS comment
+				FROM pg_proc p
 				INNER JOIN pg_namespace n ON n.oid = p.pronamespace
 				INNER JOIN pg_aggregate a on p.oid = a.aggfnoid 
 				LEFT JOIN pg_operator o ON o.oid = a.aggsortop
+				LEFT JOIN pg_description d ON d.objoid = p."oid" AND d.objsubid = 0
 				WHERE n.nspname IN ('${schemas.join("','")}')
 				AND a.aggkind = 'n'
 				${core.checkServerCompatibility(serverVersion, 11, 0) ? " AND p.prokind = 'a' " : " AND p.proisagg = true AND p.proiswindow = false "} 
@@ -299,21 +316,21 @@ const query = {
 	 * @param {import("../models/serverVersion")} serverVersion
 	 */
 	getSequences: function (schemas, serverVersion) {
-		return `SELECT seq_nspname, seq_name, owner, ownedby_table, ownedby_column, p.start_value, p.minimum_value, p.maximum_value, p.increment, p.cycle_option, ${
-			core.checkServerCompatibility(serverVersion, 10, 0) ? "p.cache_size" : "1 as cache_size"
-		}
+		return `SELECT s.seq_nspname, s.seq_name, s.owner, s.ownedby_table, s.ownedby_column, p.start_value, p.minimum_value, p.maximum_value, p.increment, p.cycle_option, 
+				${core.checkServerCompatibility(serverVersion, 10, 0) ? "p.cache_size" : "1 as cache_size"},
+				s.comment 
                 FROM (
                     SELECT   
-                        c.oid, ns.nspname AS seq_nspname, c.relname AS seq_name, r.rolname as owner, sc.relname AS ownedby_table, a.attname AS ownedby_column	    
+                        c.oid, ns.nspname AS seq_nspname, c.relname AS seq_name, r.rolname as owner, sc.relname AS ownedby_table, a.attname AS ownedby_column, ds.description AS comment
                     FROM pg_class c
                     INNER JOIN pg_namespace ns ON ns.oid = c.relnamespace 
                     INNER JOIN pg_roles r ON r.oid = c.relowner 
-                    INNER JOIN pg_depend d ON d.objid = c.oid AND d.refobjsubid > 0 AND d.deptype ='a'
-					INNER JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid	
-					INNER JOIN pg_class sc ON sc."oid" = d.refobjid
-                    WHERE c.relkind = 'S' AND ns.nspname IN ('${schemas.join("','")}') ${
-			core.checkServerCompatibility(serverVersion, 10, 0) ? "AND a.attidentity = ''" : ""
-		}  	
+                    LEFT JOIN pg_depend d ON d.objid = c.oid AND d.refobjsubid > 0 AND d.deptype ='a'
+					LEFT JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid	
+					LEFT JOIN pg_class sc ON sc."oid" = d.refobjid
+					LEFT JOIN pg_description ds ON ds.objoid = c."oid" AND d.objsubid = 0
+                    WHERE c.relkind = 'S' AND ns.nspname IN ('${schemas.join("','")}') 
+					${core.checkServerCompatibility(serverVersion, 10, 0) ? "AND (a.attidentity IS NULL OR a.attidentity = '')" : ""}
                 ) s, LATERAL pg_sequence_parameters(s.oid) p`;
 	},
 	/**
@@ -364,14 +381,21 @@ class CatalogApi {
 	 */
 	static async retrieveSchemas(client, schemas) {
 		let result = {};
+
 		const namespaces = await client.query(query.getSchemas(schemas));
 
 		await Promise.all(
-			namespaces.rows.map(async (namespace) => {
-				result[namespace.nspname] = {
-					owner: namespace.owner,
-				};
-			})
+			namespaces.rows.map(
+				async (
+					/** @type {{nspname:String, owner:String, comment: String}} */
+					namespace
+				) => {
+					result[namespace.nspname] = {
+						owner: namespace.owner,
+						comment: namespace.comment,
+					};
+				}
+			)
 		);
 
 		return result;
@@ -397,6 +421,7 @@ class CatalogApi {
 					indexes: {},
 					privileges: {},
 					owner: table.tableowner,
+					comment: table.comment,
 				};
 
 				const columns = await client.query(query.getTableColumns(table.schemaname, table.tablename, client.version));
@@ -415,12 +440,12 @@ class CatalogApi {
 							columnIdentity = "BY DEFAULT";
 							defaultValue = "";
 							break;
-						default:
-							if (column.adsrc && column.adsrc.startsWith("nextval") && column.adsrc.includes("_seq")) {
-								defaultValue = "";
-								dataType = "serial";
-							}
-							break;
+						// default:
+						// 	if (column.adsrc && column.adsrc.startsWith("nextval") && column.adsrc.includes("_seq")) {
+						// 		defaultValue = "";
+						// 		dataType = "serial";
+						// 	}
+						// 	break;
 					}
 
 					result[fullTableName].columns[columnName] = {
@@ -432,6 +457,7 @@ class CatalogApi {
 						precision: column.precision,
 						scale: column.scale,
 						identity: columnIdentity,
+						comment: column.comment,
 					};
 				});
 
@@ -441,6 +467,7 @@ class CatalogApi {
 					result[fullTableName].constraints[constraintName] = {
 						type: constraint.contype,
 						definition: constraint.definition,
+						comment: constraint.comment,
 					};
 				});
 
@@ -458,6 +485,7 @@ class CatalogApi {
 				indexes.rows.forEach((index) => {
 					result[fullTableName].indexes[index.indexname] = {
 						definition: index.indexdef,
+						comment: index.comment,
 					};
 				});
 
@@ -507,6 +535,7 @@ class CatalogApi {
 					owner: view.viewowner,
 					privileges: {},
 					dependencies: [],
+					comment: view.comment,
 				};
 
 				let privileges = await client.query(query.getViewPrivileges(view.schemaname, view.viewname));
@@ -563,12 +592,14 @@ class CatalogApi {
 					owner: view.matviewowner,
 					privileges: {},
 					dependencies: [],
+					comment: view.comment,
 				};
 
 				let indexes = await client.query(query.getTableIndexes(view.schemaname, view.matviewname));
 				indexes.rows.forEach((index) => {
 					result[fullViewName].indexes[index.indexname] = {
 						definition: index.indexdef,
+						comment: index.comment,
 					};
 				});
 
@@ -618,11 +649,14 @@ class CatalogApi {
 		await Promise.all(
 			procedures.rows.map(async (procedure) => {
 				let fullProcedureName = `"${procedure.nspname}"."${procedure.proname}"`;
-				result[fullProcedureName] = {
+				if (!result[fullProcedureName]) result[fullProcedureName] = {};
+
+				result[fullProcedureName][procedure.argtypes] = {
 					definition: procedure.definition,
 					owner: procedure.owner,
 					argTypes: procedure.argtypes,
 					privileges: {},
+					comment: procedure.comment,
 				};
 
 				let privileges = await client.query(query.getFunctionPrivileges(procedure.nspname, procedure.proname, procedure.argtypes));
@@ -632,7 +666,7 @@ class CatalogApi {
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
 						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
 					)
-						result[fullProcedureName].privileges[privilege.usename] = {
+						result[fullProcedureName][procedure.argtypes].privileges[privilege.usename] = {
 							execute: privilege.execute,
 						};
 				});
@@ -655,11 +689,14 @@ class CatalogApi {
 		await Promise.all(
 			aggregates.rows.map(async (aggregate) => {
 				let fullAggregateName = `"${aggregate.nspname}"."${aggregate.proname}"`;
-				result[fullAggregateName] = {
+				if (!result[fullAggregateName]) result[fullAggregateName] = {};
+
+				result[fullAggregateName][aggregate.argtypes] = {
 					definition: aggregate.definition,
 					owner: aggregate.owner,
 					argTypes: aggregate.argtypes,
 					privileges: {},
+					comment: aggregate.comment,
 				};
 
 				let privileges = await client.query(query.getFunctionPrivileges(aggregate.nspname, aggregate.proname, aggregate.argtypes));
@@ -669,7 +706,7 @@ class CatalogApi {
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
 						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
 					)
-						result[fullAggregateName].privileges[privilege.usename] = {
+						result[fullAggregateName][aggregate.argtypes].privileges[privilege.usename] = {
 							execute: privilege.execute,
 						};
 				});
@@ -701,8 +738,9 @@ class CatalogApi {
 					cacheSize: sequence.cache_size,
 					isCycle: sequence.cycle_option,
 					name: sequence.seq_name,
-					ownedBy: `${sequence.ownedby_table}.${sequence.ownedby_column}`,
+					ownedBy: sequence.ownedby_table && sequence.ownedby_column ? `${sequence.ownedby_table}.${sequence.ownedby_column}` : null,
 					privileges: {},
+					comment: sequence.comment,
 				};
 
 				let privileges = await client.query(query.getSequencePrivileges(sequence.seq_nspname, sequence.seq_name, client.version));
