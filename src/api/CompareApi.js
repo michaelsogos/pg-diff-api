@@ -306,14 +306,19 @@ class CompareApi {
 			finalizedScript.push(...this.finalizeScript(`${actionLabel} TABLE ${sourceTable}`, sqlScript));
 		}
 
-		if (config.compareOptions.schemaCompare.dropMissingTable)
+		if (config.compareOptions.schemaCompare.dropMissingTable) {
+			const migrationFullTableName = config.migrationOptions
+				? `"${config.migrationOptions.historyTableSchema}"."${config.migrationOptions.historyTableName}"`
+				: "";
+
 			for (let table in dbTargetObjects.tables) {
 				let sqlScript = [];
 
-				if (!sourceTables[table]) sqlScript.push(sql.generateDropTableScript(table));
+				if (!sourceTables[table] && table != migrationFullTableName) sqlScript.push(sql.generateDropTableScript(table));
 
 				finalizedScript.push(...this.finalizeScript(`DROP TABLE ${table}`, sqlScript));
 			}
+		}
 
 		return finalizedScript;
 	}

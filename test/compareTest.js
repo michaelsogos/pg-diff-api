@@ -9,10 +9,16 @@ Config.sourceClient.password = "postgres";
 Config.compareOptions.outputDirectory = 1;
 // Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
 Config.compareOptions.schemaCompare.namespaces = []; //["public", "schema_one"];
+Config.compareOptions.schemaCompare.dropMissingTable = true;
+Config.compareOptions.schemaCompare.dropMissingView = true;
+Config.compareOptions.schemaCompare.dropMissingFunction = true;
+Config.compareOptions.schemaCompare.dropMissingAggregate = true;
+
 Config.compareOptions.dataCompare.enable = true;
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("diff_test", ["id"]));
+
 
 var pgDiff = new PgDiff(Config);
 pgDiff.events.on("compare", (message, percentage) => {
