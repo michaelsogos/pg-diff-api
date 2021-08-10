@@ -427,6 +427,15 @@ class CompareApi {
 			else changes.isNewIdentity = false;
 		}
 
+		if (
+			sourceTableColumn.generatedColumn &&
+			(sourceTableColumn.generatedColumn != targetTableColumn.generatedColumn || sourceTableColumn.default != targetTableColumn.default)
+		) {
+			changes = {};
+			sqlScript.push(sql.generateDropTableColumnScript(tableName, columnName, true));
+			sqlScript.push(sql.generateAddTableColumnScript(tableName, columnName, sourceTableColumn));
+		}
+
 		if (Object.keys(changes).length > 0) {
 			let rawColumnName = columnName.substring(1).slice(0, -1);
 
@@ -1209,7 +1218,7 @@ class CompareApi {
 			if (missingKeyColumns) throw new Error(`The table [${fullTableName}] doesn't contains the field [${misssingKeyField}]`);
 
 			let response = await client.query(
-				`SELECT MD5(ROW(${tableDefinition.tableKeyFields.join(",")})::text) AS "rowHash", * FROM ${fullTableName}`
+				`SELECT MD5(ROW(${tableDefinition.tableKeyFields.map((c) => `"${c}"`).join(",")})::text) AS "rowHash", * FROM ${fullTableName}`
 			);
 
 			for (const field of response.fields) {
@@ -1218,6 +1227,7 @@ class CompareApi {
 				let f = field;
 				f.datatype = dbObjects.tables[fullTableName].columns[`"${field.name}"`].datatype;
 				f.dataTypeCategory = dbObjects.tables[fullTableName].columns[`"${field.name}"`].dataTypeCategory;
+				f.isGeneratedColumn = dbObjects.tables[fullTableName].columns[`"${field.name}"`].generatedColumn ? true : false;
 				result.fields.push(f);
 			}
 
@@ -1387,6 +1397,9 @@ class CompareApi {
 
 		for (const field in sourceRecord) {
 			if (field === "rowHash") continue;
+			if (fields.some((f) => f.name == field && f.isGeneratedColumn == true)) {
+				continue;
+			}
 
 			if (targetRecord[field] === undefined && this.checkIsNewColumn(addedColumns, table, field)) {
 				changes[field] = sourceRecord[field];

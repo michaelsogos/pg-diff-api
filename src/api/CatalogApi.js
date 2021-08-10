@@ -56,9 +56,9 @@ const query = {
 	 * @param {import("../models/serverVersion")} serverVersion
 	 */
 	getTableColumns: function (schemaName, tableName, serverVersion) {
-		return `SELECT a.attname, a.attnotnull, t.typname, t.oid as typeid, t.typcategory, pg_get_expr(ad.adbin ,ad.adrelid ) as adsrc, ${
-			core.checkServerCompatibility(serverVersion, 10, 0) ? "a.attidentity" : "NULL as attidentity"
-		},
+		return `SELECT a.attname, a.attnotnull, t.typname, t.oid as typeid, t.typcategory, pg_get_expr(ad.adbin ,ad.adrelid ) as adsrc, 
+				${core.checkServerCompatibility(serverVersion, 10, 0) ? "a.attidentity" : "NULL as attidentity"},
+				${core.checkServerCompatibility(serverVersion, 12, 0) ? "a.attgenerated" : "NULL as attgenerated"},
                 CASE 
                     WHEN t.typname = 'numeric' AND a.atttypmod > 0 THEN (a.atttypmod-4) >> 16
                     WHEN (t.typname = 'bpchar' or t.typname = 'varchar') AND a.atttypmod > 0 THEN a.atttypmod-4
@@ -430,6 +430,7 @@ class CatalogApi {
 					let columnIdentity = null;
 					let defaultValue = column.adsrc;
 					let dataType = column.typname;
+					let generatedColumn = null;
 
 					switch (column.attidentity) {
 						case "a":
@@ -440,12 +441,12 @@ class CatalogApi {
 							columnIdentity = "BY DEFAULT";
 							defaultValue = "";
 							break;
-						// default:
-						// 	if (column.adsrc && column.adsrc.startsWith("nextval") && column.adsrc.includes("_seq")) {
-						// 		defaultValue = "";
-						// 		dataType = "serial";
-						// 	}
-						// 	break;
+					}
+
+					switch (column.attgenerated) {
+						case "s":
+							generatedColumn = "STORED";
+							break;
 					}
 
 					result[fullTableName].columns[columnName] = {
@@ -458,6 +459,7 @@ class CatalogApi {
 						scale: column.scale,
 						identity: columnIdentity,
 						comment: column.comment,
+						generatedColumn: generatedColumn,
 					};
 				});
 
