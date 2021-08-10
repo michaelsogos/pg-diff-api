@@ -32,15 +32,23 @@ var helper = {
 	 * @param {Object} columnSchema
 	 */
 	__generateColumnDefinition: function (column, columnSchema) {
+		let nullableExpression = columnSchema.nullable ? "NULL" : "NOT NULL";
+
 		let defaultValue = "";
 		if (columnSchema.default) defaultValue = `DEFAULT ${columnSchema.default}`;
 
 		let identityValue = "";
 		if (columnSchema.identity) identityValue = `GENERATED ${columnSchema.identity} AS IDENTITY`;
 
+		if (columnSchema.generatedColumn) {
+			nullableExpression = "";
+			defaultValue = `GENERATED ALWAYS AS ${columnSchema.default} STORED`;
+			identityValue = "";
+		}
+
 		let dataType = this.__generateColumnDataTypeDefinition(columnSchema);
 
-		return `${column} ${dataType} ${columnSchema.nullable ? "NULL" : "NOT NULL"} ${defaultValue} ${identityValue}`;
+		return `${column} ${dataType} ${nullableExpression} ${defaultValue} ${identityValue}`;
 	},
 	/**
 	 *
@@ -247,8 +255,8 @@ var helper = {
 	 * @param {String} table
 	 * @param {String} column
 	 */
-	generateDropTableColumnScript: function (table, column) {
-		let script = `\nALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS ${column} CASCADE;${hints.dropColumn}\n`;
+	generateDropTableColumnScript: function (table, column, withoutHint = false) {
+		let script = `\nALTER TABLE IF EXISTS ${table} DROP COLUMN IF EXISTS ${column} CASCADE;${withoutHint ? "" : hints.dropColumn}\n`;
 		return script;
 	},
 	/**
@@ -621,6 +629,7 @@ var helper = {
 		if (dataTypeIndex >= 0) {
 			dataTypeName = fields[dataTypeIndex].datatype;
 			dataTypeCategory = fields[dataTypeIndex].dataTypeCategory;
+			if (fields[dataTypeIndex].isGeneratedColumn) return "DEFAULT";
 		}
 
 		switch (dataTypeCategory) {
