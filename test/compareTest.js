@@ -15,7 +15,7 @@ Config.compareOptions.schemaCompare.dropMissingFunction = true;
 Config.compareOptions.schemaCompare.dropMissingAggregate = true;
 
 Config.compareOptions.dataCompare.enable = true;
-Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id","a_camelCaseField"]));
+Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id","a_camelCaseField","a_string_array2"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("diff_test", ["id"]));
 

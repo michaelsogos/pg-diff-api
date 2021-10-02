@@ -188,7 +188,9 @@ var helper = {
 
 		let indexesComment = [];
 		for (let index in schema.indexes) {
-			indexesComment.push(this.generateChangeCommentScript(objectType.INDEX, index, schema.indexes[index].comment));
+			indexesComment.push(
+				this.generateChangeCommentScript(objectType.INDEX, `"${schema.indexes[index].schema}"."${index}"`, schema.indexes[index].comment)
+			);
 		}
 
 		let script = `\nCREATE TABLE IF NOT EXISTS ${table} (\n\t${columns.join(",\n\t")}\n)${options};\n${indexes.join("\n")}\n${privileges.join(

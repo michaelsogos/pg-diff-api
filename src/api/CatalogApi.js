@@ -488,6 +488,7 @@ class CatalogApi {
 					result[fullTableName].indexes[index.indexname] = {
 						definition: index.indexdef,
 						comment: index.comment,
+						schema: table.schemaname,
 					};
 				});
 
@@ -602,6 +603,7 @@ class CatalogApi {
 					result[fullViewName].indexes[index.indexname] = {
 						definition: index.indexdef,
 						comment: index.comment,
+						schema: view.schemaname,
 					};
 				});
 
