@@ -580,21 +580,45 @@ class CompareApi {
 						sqlScript.push(sql.generateDropIndexScript(index));
 					}
 					sqlScript.push(`\n${sourceTableIndexes[index].definition};\n`);
-					sqlScript.push(sql.generateChangeCommentScript(objectType.INDEX, index, sourceTableIndexes[index].comment));
+					sqlScript.push(
+						sql.generateChangeCommentScript(
+							objectType.INDEX,
+							`"${sourceTableIndexes[index].schema}"."${index}"`,
+							sourceTableIndexes[index].comment
+						)
+					);
 				} else {
 					if (droppedIndexes.includes(index)) {
 						//It will recreate a dropped index because changes happens on involved columns
 						sqlScript.push(`\n${sourceTableIndexes[index].definition};\n`);
-						sqlScript.push(sql.generateChangeCommentScript(objectType.INDEX, index, sourceTableIndexes[index].comment));
+						sqlScript.push(
+							sql.generateChangeCommentScript(
+								objectType.INDEX,
+								`"${sourceTableIndexes[index].schema}"."${index}"`,
+								sourceTableIndexes[index].comment
+							)
+						);
 					} else {
 						if (sourceTableIndexes[index].comment != targetTableIndexes[index].comment)
-							sqlScript.push(sql.generateChangeCommentScript(objectType.INDEX, index, sourceTableIndexes[index].comment));
+							sqlScript.push(
+								sql.generateChangeCommentScript(
+									objectType.INDEX,
+									`"${sourceTableIndexes[index].schema}"."${index}"`,
+									sourceTableIndexes[index].comment
+								)
+							);
 					}
 				}
 			} else {
 				//Table index not exists on target database, then generate script to add index
 				sqlScript.push(`\n${sourceTableIndexes[index].definition};\n`);
-				sqlScript.push(sql.generateChangeCommentScript(objectType.INDEX, index, sourceTableIndexes[index].comment));
+				sqlScript.push(
+					sql.generateChangeCommentScript(
+						objectType.INDEX,
+						`"${sourceTableIndexes[index].schema}"."${index}"`,
+						sourceTableIndexes[index].comment
+					)
+				);
 			}
 		}
 
