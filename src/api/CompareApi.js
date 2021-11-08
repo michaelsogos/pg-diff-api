@@ -1458,7 +1458,7 @@ class CompareApi {
 	}
 
 	/**
-	 *
+	 * Returns true if there is a difference between source and target vlue
 	 * @param {Object} sourceValue
 	 * @param {Object} targetValue
 	 */
@@ -1466,7 +1466,7 @@ class CompareApi {
 		var sourceValueType = typeof sourceValue;
 		var targetValueType = typeof targetValue;
 
-		if (sourceValueType != targetValueType) return false;
+		if (sourceValueType != targetValueType) return true;
 		else if (sourceValue instanceof Date) return sourceValue.getTime() !== targetValue.getTime();
 		else if (sourceValue instanceof Object) return !deepEqual(sourceValue, targetValue);
 		else return sourceValue !== targetValue;
