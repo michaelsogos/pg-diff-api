@@ -83,10 +83,13 @@ const query = {
 	 * @param {String} tableName
 	 */
 	getTableConstraints: function (schemaName, tableName) {
-		return `SELECT c.conname, c.contype, pg_get_constraintdef(c.oid) as definition, d.description AS comment
+		return `SELECT c.conname, c.contype, f_sch.nspname AS foreign_schema, f_tbl.relname AS foreign_table, 
+				pg_get_constraintdef(c.oid) as definition, d.description AS comment
 				FROM pg_constraint c
 				INNER JOIN pg_namespace n ON n.nspname = '${schemaName}'
                 INNER JOIN pg_class cl ON cl.relname ='${tableName}' AND cl.relnamespace = n.oid
+				LEFT JOIN pg_class f_tbl ON f_tbl.oid = c.confrelid
+				LEFT JOIN pg_namespace f_sch ON f_sch.oid = f_tbl.relnamespace
 				LEFT JOIN pg_description d ON d.objoid = c."oid" AND d.objsubid = 0
 				WHERE c.conrelid = cl.oid`;
 	},
@@ -408,6 +411,7 @@ class CatalogApi {
 	 */
 	static async retrieveTables(client, config) {
 		let result = {};
+		let tableNamesPriority = [];
 
 		const tables = await client.query(query.getTables(config.compareOptions.schemaCompare.namespaces));
 
@@ -470,7 +474,26 @@ class CatalogApi {
 						type: constraint.contype,
 						definition: constraint.definition,
 						comment: constraint.comment,
+						foreign_schema: constraint.foreign_schema,
+						foreign_table: constraint.foreign_table,
 					};
+
+					//REFERENCED tables have to be created before
+					if (constraint.contype == "f") {
+						const tableNameToReorder = `"${constraint.foreign_schema}"."${constraint.foreign_table}"`;
+						const indexOfTableNameToReorder = tableNamesPriority.indexOf(tableNameToReorder);
+						const indexOfCurrentTableName = tableNamesPriority.indexOf(fullTableName);
+
+						if (indexOfCurrentTableName >= 0) {
+							if (indexOfTableNameToReorder < 0) {
+								tableNamesPriority.splice(indexOfCurrentTableName, 0, tableNameToReorder);
+							} else if (indexOfCurrentTableName < indexOfTableNameToReorder) {
+								tableNamesPriority.splice(indexOfCurrentTableName, 0, tableNamesPriority.splice(indexOfTableNameToReorder, 1)[0]);
+							}
+						} else if (indexOfTableNameToReorder < 0) {
+							tableNamesPriority.push(`"${constraint.foreign_schema}"."${constraint.foreign_table}"`);
+						}
+					}
 				});
 
 				//@mso -> relhadoids has been deprecated from PG v12.0
@@ -515,6 +538,15 @@ class CatalogApi {
 				//TODO: Missing discovering of WITH GRANT OPTION, that is used to indicate if user\role can add GRANTS to other users
 			})
 		);
+
+		//Re-order tables based on priority
+		const reorderedResult = {};
+		for (const tableName of tableNamesPriority) {
+			reorderedResult[tableName] = result[tableName];
+			delete result[tableName];
+		}
+
+		result = { ...reorderedResult, ...result };
 
 		return result;
 	}
