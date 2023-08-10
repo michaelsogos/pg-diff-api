@@ -167,6 +167,7 @@ class core {
 
 			return result;
 		}
+
 		async function getGlobalAuthorName() {
 			let result = null;
 
@@ -180,12 +181,41 @@ class core {
 
 			return result;
 		}
+
 		async function getGlobalAuthorEmail() {
 			let result = null;
 
 			try {
 				// eslint-disable-next-line no-unused-vars
 				const { stdout, stderr } = await exec("git config --global user.email");
+				result = stdout.trim();
+			} catch (err) {
+				result = err.stdout.trim();
+			}
+
+			return result;
+		}
+
+		async function getDefaultAuthorName() {
+			let result = null;
+
+			try {
+				// eslint-disable-next-line no-unused-vars
+				const { stdout, stderr } = await exec("git config user.name");
+				result = stdout.trim();
+			} catch (err) {
+				result = err.stdout.trim();
+			}
+
+			return result;
+		}
+
+		async function getDefaultAuthorEmail() {
+			let result = null;
+
+			try {
+				// eslint-disable-next-line no-unused-vars
+				const { stdout, stderr } = await exec("git config user.email");
 				result = stdout.trim();
 			} catch (err) {
 				result = err.stdout.trim();
@@ -202,9 +232,17 @@ class core {
 
 			authorName = await getGlobalAuthorName();
 			authorEmail = await getGlobalAuthorEmail();
+
+			if (!authorName) {
+				//Also GIT GLOBAL didn't return anything! Try GIT defaults.
+
+				authorName = await getDefaultAuthorName();
+				authorEmail = await getDefaultAuthorEmail();
+			}
 		}
 
-		if (authorEmail) return `${authorName} (${authorEmail})`;
+		if (!authorName) return "Unknown author configured on this Git Repository";
+		else if (authorEmail) return `${authorName} (${authorEmail})`;
 		else return authorName;
 	}
 }
