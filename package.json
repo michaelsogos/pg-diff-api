@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"test-compare": "node ./test/compareTest.js",
-		"test-migration": "node ./test/migrationTest.js"
+		"test-migration": "node ./test/migrateTest.js"
 	},
 	"repository": {
 		"type": "git",

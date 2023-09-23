@@ -105,7 +105,7 @@ const query = {
 				INNER JOIN pg_namespace tbln ON tbl.relnamespace = tbln.oid
                 INNER JOIN pg_class idx ON idx.oid = i.indexrelid
 				LEFT JOIN pg_description d ON d.objoid = idx."oid" AND d.objsubid = 0
-				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false`;
+				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false AND i.indisunique = FALSE`;
 	},
 	/**
 	 *

@@ -4,9 +4,12 @@ const TableDefinition = require("../src/models/tableDefinition");
 
 Config.targetClient.database = "pg_diff_test2";
 Config.sourceClient.database = "pg_diff_test1";
+Config.sourceClient.port = 5437;
+Config.targetClient.port = 5437;
 Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
-Config.compareOptions.outputDirectory = 1;
+Config.compareOptions.outputDirectory = ".\\test\\patches";
+
 // Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
 Config.compareOptions.schemaCompare.namespaces = []; //["public", "schema_one"];
 Config.compareOptions.schemaCompare.dropMissingTable = true;
@@ -14,11 +17,12 @@ Config.compareOptions.schemaCompare.dropMissingView = true;
 Config.compareOptions.schemaCompare.dropMissingFunction = true;
 Config.compareOptions.schemaCompare.dropMissingAggregate = true;
 
-Config.compareOptions.dataCompare.enable = true;
-Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id","a_camelCaseField","a_string_array2"]));
+Config.compareOptions.dataCompare.enable = false;
+Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_generic", ["id", "a_camelCaseField", "a_string_array2"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("test_columnd_def_value", ["id"]));
 Config.compareOptions.dataCompare.tables.push(new TableDefinition("diff_test", ["id"]));
 
+Config.migrationOptions.historyTableName = "test_migrations";
 
 var pgDiff = new PgDiff(Config);
 pgDiff.events.on("compare", (message, percentage) => {
