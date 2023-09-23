@@ -1,9 +1,15 @@
 const PgDiff = require("../src/index").PgDiff;
 const Config = require("../src/index").Config;
 
-Config.migrationOptions.historyTableName = "test_migrations";
-Config.targetClient.database = "pgdiff_test";
+
+Config.targetClient.database = "pg_diff_test2";
+Config.sourceClient.database = "pg_diff_test1";
+Config.sourceClient.port = 5437;
+Config.targetClient.port = 5437;
 Config.targetClient.password = "postgres";
+Config.sourceClient.password = "postgres";
+
+Config.migrationOptions.historyTableName = "test_migrations";
 Config.migrationOptions.patchesDirectory = ".\\test\\patches";
 
 var pgDiff = new PgDiff(Config);
