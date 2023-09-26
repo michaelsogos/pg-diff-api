@@ -824,6 +824,7 @@ class CompareApi {
 			for (const procedureArgs in sourceFunctions[procedure]) {
 				let sqlScript = [];
 				let actionLabel = "";
+				const procedureType = sourceFunctions[procedure][procedureArgs].type === "f" ? objectType.FUNCTION : objectType.PROCEDURE;
 
 				if (targetFunctions[procedure] && targetFunctions[procedure][procedureArgs]) {
 					//Procedure exists on both database, then compare procedure definition
@@ -838,7 +839,7 @@ class CompareApi {
 						sqlScript.push(sql.generateChangeProcedureScript(procedure, sourceFunctions[procedure][procedureArgs]));
 						sqlScript.push(
 							sql.generateChangeCommentScript(
-								objectType.FUNCTION,
+								procedureType,
 								`${procedure}(${procedureArgs})`,
 								sourceFunctions[procedure][procedureArgs].comment
 							)
@@ -848,6 +849,7 @@ class CompareApi {
 							...this.compareProcedurePrivileges(
 								procedure,
 								procedureArgs,
+								sourceFunctions[procedure][procedureArgs].type,
 								sourceFunctions[procedure][procedureArgs].privileges,
 								targetFunctions[procedure][procedureArgs].privileges
 							)
@@ -855,13 +857,18 @@ class CompareApi {
 
 						if (sourceFunctions[procedure][procedureArgs].owner != targetFunctions[procedure][procedureArgs].owner)
 							sqlScript.push(
-								sql.generateChangeProcedureOwnerScript(procedure, procedureArgs, sourceFunctions[procedure][procedureArgs].owner)
+								sql.generateChangeProcedureOwnerScript(
+									procedure,
+									procedureArgs,
+									sourceFunctions[procedure][procedureArgs].owner,
+									sourceFunctions[procedure][procedureArgs].type
+								)
 							);
 
 						if (sourceFunctions[procedure][procedureArgs].comment != sourceFunctions[procedure][procedureArgs].comment)
 							sqlScript.push(
 								sql.generateChangeCommentScript(
-									objectType.FUNCTION,
+									procedureType,
 									`${procedure}(${procedureArgs})`,
 									sourceFunctions[procedure][procedureArgs].comment
 								)
@@ -874,14 +881,14 @@ class CompareApi {
 					sqlScript.push(sql.generateCreateProcedureScript(procedure, sourceFunctions[procedure][procedureArgs]));
 					sqlScript.push(
 						sql.generateChangeCommentScript(
-							objectType.FUNCTION,
+							procedureType,
 							`${procedure}(${procedureArgs})`,
 							sourceFunctions[procedure][procedureArgs].comment
 						)
 					);
 				}
 
-				finalizedScript.push(...this.finalizeScript(`${actionLabel} FUNCTION ${procedure}(${procedureArgs})`, sqlScript));
+				finalizedScript.push(...this.finalizeScript(`${actionLabel} ${procedureType} ${procedure}(${procedureArgs})`, sqlScript));
 			}
 		}
 
@@ -933,6 +940,7 @@ class CompareApi {
 							...this.compareProcedurePrivileges(
 								aggregate,
 								aggregateArgs,
+								sourceFunctions[procedure][procedureArgs].type,
 								sourceAggregates[aggregate][aggregateArgs].privileges,
 								targetAggregates[aggregate][aggregateArgs].privileges
 							)
@@ -989,10 +997,11 @@ class CompareApi {
 	 *
 	 * @param {String} procedure
 	 * @param {String} argTypes
+	 * @param {"f"|"p"} type
 	 * @param {Object} sourceProcedurePrivileges
 	 * @param {Object} targetProcedurePrivileges
 	 */
-	static compareProcedurePrivileges(procedure, argTypes, sourceProcedurePrivileges, targetProcedurePrivileges) {
+	static compareProcedurePrivileges(procedure, argTypes, type, sourceProcedurePrivileges, targetProcedurePrivileges) {
 		let sqlScript = [];
 
 		for (let role in sourceProcedurePrivileges) {
@@ -1003,10 +1012,11 @@ class CompareApi {
 				if (sourceProcedurePrivileges[role].execute != targetProcedurePrivileges[role].execute)
 					changes.execute = sourceProcedurePrivileges[role].execute;
 
-				if (Object.keys(changes).length > 0) sqlScript.push(sql.generateChangesProcedureRoleGrantsScript(procedure, argTypes, role, changes));
+				if (Object.keys(changes).length > 0)
+					sqlScript.push(sql.generateChangesProcedureRoleGrantsScript(procedure, argTypes, role, changes, type));
 			} else {
 				//Procedure grants for role not exists on target database, then generate script to add role privileges
-				sqlScript.push(sql.generateProcedureRoleGrantsScript(procedure, argTypes, role, sourceProcedurePrivileges[role]));
+				sqlScript.push(sql.generateProcedureRoleGrantsScript(procedure, argTypes, role, sourceProcedurePrivileges[role], type));
 			}
 		}
 

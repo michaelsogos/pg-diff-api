@@ -81,11 +81,15 @@ var helper = {
 	 * @param {String} argTypes
 	 * @param {String} role
 	 * @param {Object} privileges
+	 * @param {"f"|"p"} type
 	 */
-	__generateProcedureGrantsDefinition: function (procedure, argTypes, role, privileges) {
+	__generateProcedureGrantsDefinition: function (procedure, argTypes, role, privileges, type) {
+		const procedureType = type === "f" ? "FUNCTION" : "PROCEDURE";
+
 		let definitions = [];
 
-		if (privileges.execute) definitions.push(`GRANT EXECUTE ON FUNCTION ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
+		if (privileges.execute)
+			definitions.push(`GRANT EXECUTE ON ${procedureType} ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
 
 		return definitions;
 	},
@@ -114,7 +118,7 @@ var helper = {
 	 * @param {String} parentObjectName
 	 */
 	generateChangeCommentScript: function (objectType, objectName, comment, parentObjectName = null) {
-		const description = comment ? `'${comment}'` : "NULL";
+		const description = comment ? `'${comment.replace("'", "''")}'` : "NULL";
 		const parentObject = parentObjectName ? `ON ${parentObjectName}` : "";
 		let script = `\nCOMMENT ON ${objectType} ${objectName} ${parentObject} IS ${description};\n`;
 		return script;
@@ -439,13 +443,18 @@ var helper = {
 	 *
 	 * @param {String} procedure
 	 * @param {Object} schema
+	 * @param {"f"|"p"} type
 	 */
 	generateCreateProcedureScript: function (procedure, schema) {
+		const procedureType = schema.type === "f" ? "FUNCTION" : "PROCEDURE";
+
 		//Generate privileges script
 		let privileges = [];
-		privileges.push(`ALTER FUNCTION ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
+		privileges.push(`ALTER ${procedureType} ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
 		for (let role in schema.privileges) {
-			privileges = privileges.concat(this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role]));
+			privileges = privileges.concat(
+				this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role], schema.type)
+			);
 		}
 
 		let script = `\n${schema.definition};\n${privileges.join("\n")}\n`;
@@ -461,7 +470,7 @@ var helper = {
 		let privileges = [];
 		privileges.push(`ALTER AGGREGATE ${aggregate}(${schema.argTypes}) OWNER TO ${schema.owner};`);
 		for (let role in schema.privileges) {
-			privileges = privileges.concat(this.__generateProcedureGrantsDefinition(aggregate, schema.argTypes, role, schema.privileges[role]));
+			privileges = privileges.concat(this.__generateProcedureGrantsDefinition(aggregate, schema.argTypes, role, schema.privileges[role], "f"));
 		}
 
 		let script = `\nCREATE AGGREGATE ${aggregate} (${schema.argTypes}) (\n${schema.definition}\n);\n${privileges.join("\n")}\n`;
@@ -473,7 +482,9 @@ var helper = {
 	 * @param {Object} schema
 	 */
 	generateChangeProcedureScript: function (procedure, schema) {
-		let script = `\nDROP FUNCTION IF EXISTS ${procedure}(${schema.argTypes});\n${this.generateCreateProcedureScript(procedure, schema)}`;
+		const procedureType = schema.type === "f" ? "FUNCTION" : "PROCEDURE";
+
+		let script = `\nDROP ${procedureType} IF EXISTS ${procedure}(${schema.argTypes});\n${this.generateCreateProcedureScript(procedure, schema)}`;
 		return script;
 	},
 	/**
@@ -509,9 +520,10 @@ var helper = {
 	 * @param {String} argTypes
 	 * @param {String} role
 	 * @param {Object} privileges
+	 * @param {"f"|"p"} type
 	 */
-	generateProcedureRoleGrantsScript: function (procedure, argTypes, role, privileges) {
-		let script = `\n${this.__generateProcedureGrantsDefinition(procedure, argTypes, role, privileges).join("\n")}`;
+	generateProcedureRoleGrantsScript: function (procedure, argTypes, role, privileges, type) {
+		let script = `\n${this.__generateProcedureGrantsDefinition(procedure, argTypes, role, privileges, type).join("\n")}`;
 		return script;
 	},
 	/**
@@ -520,15 +532,17 @@ var helper = {
 	 * @param {String} argTypes
 	 * @param {String} role
 	 * @param {Object} changes
+	 * @param {"f"|"p"} type
 	 */
-	generateChangesProcedureRoleGrantsScript: function (procedure, argTypes, role, changes) {
+	generateChangesProcedureRoleGrantsScript: function (procedure, argTypes, role, changes, type) {
+		const procedureType = type === "f" ? "FUNCTION" : "PROCEDURE";
 		let privileges = [];
 
 		if (Object.prototype.hasOwnProperty.call(changes, "execute"))
 			privileges.push(
-				`${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
-					hints.potentialRoleMissing
-				}`
+				`${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON ${procedureType} ${procedure}(${argTypes}) ${
+					changes.execute ? "TO" : "FROM"
+				} ${role};${hints.potentialRoleMissing}`
 			);
 
 		let script = `\n${privileges.join("\n")}`;
@@ -539,9 +553,12 @@ var helper = {
 	 * @param {String} procedure
 	 * @param {String} argTypes
 	 * @param {String} owner
+	 * @param {"p"!"f"} type
 	 */
-	generateChangeProcedureOwnerScript: function (procedure, argTypes, owner) {
-		let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
+	generateChangeProcedureOwnerScript: function (procedure, argTypes, owner, type) {
+		const procedureType = type === "f" ? "FUNCTION" : "PROCEDURE";
+
+		let script = `\nALTER ${procedureType} ${procedure}(${argTypes}) OWNER TO ${owner};`;
 		return script;
 	},
 	/**
