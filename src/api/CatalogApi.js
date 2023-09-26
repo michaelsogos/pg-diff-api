@@ -213,12 +213,13 @@ const query = {
 	 */
 	getFunctions: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
-		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes, d.description AS comment
+		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, 
+				oidvectortypes(proargtypes) as argtypes, d.description AS comment, p.prokind
 				FROM pg_proc p
 				INNER JOIN pg_namespace n ON n.oid = p.pronamespace
 				LEFT JOIN pg_description d ON d.objoid = p."oid" AND d.objsubid = 0
 				WHERE n.nspname IN ('${schemas.join("','")}') AND p.probin IS NULL 
-				${core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind = 'f'" : "AND p.proisagg = false AND p.proiswindow = false"} 
+				${core.checkServerCompatibility(serverVersion, 11, 0) ? "AND p.prokind IN ('f','p')" : "AND p.proisagg = false AND p.proiswindow = false"} 
 				AND p."oid" NOT IN (
 					SELECT d.objid 
 					FROM pg_depend d
@@ -693,6 +694,7 @@ class CatalogApi {
 					argTypes: procedure.argtypes,
 					privileges: {},
 					comment: procedure.comment,
+					type: procedure.prokind,
 				};
 
 				let privileges = await client.query(query.getFunctionPrivileges(procedure.nspname, procedure.proname, procedure.argtypes));
