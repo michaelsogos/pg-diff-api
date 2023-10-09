@@ -92,6 +92,7 @@ class core {
 			database: config.database,
 			password: config.password,
 			port: config.port,
+			ssl: config.ssl,
 			application_name: config.applicationName,
 		});
 

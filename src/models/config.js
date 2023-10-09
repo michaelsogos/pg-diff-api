@@ -8,6 +8,7 @@ module.exports = {
 		/** @type {String} */
 		/** @type {String} */
 		password: null,
+		ssl: false,
 		applicationName: "pg-diff-api",
 	},
 	sourceClient: {
@@ -17,6 +18,7 @@ module.exports = {
 		user: "postgres",
 		/** @type {String} */
 		password: null,
+		ssl: false,
 		applicationName: "pg-diff-api",
 	},
 	compareOptions: {
