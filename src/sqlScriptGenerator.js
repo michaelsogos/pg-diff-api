@@ -118,7 +118,7 @@ var helper = {
 	 * @param {String} parentObjectName
 	 */
 	generateChangeCommentScript: function (objectType, objectName, comment, parentObjectName = null) {
-		const description = comment ? `'${comment.replace("'", "''")}'` : "NULL";
+		const description = comment ? `'${comment.replaceAll("'", "''")}'` : "NULL";
 		const parentObject = parentObjectName ? `ON ${parentObjectName}` : "";
 		let script = `\nCOMMENT ON ${objectType} ${objectName} ${parentObject} IS ${description};\n`;
 		return script;
