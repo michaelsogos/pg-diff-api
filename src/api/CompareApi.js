@@ -43,10 +43,8 @@ class CompareApi {
 		let droppedConstraints = [];
 		let droppedIndexes = [];
 		let droppedViews = [];
-		let droppedTriggers = [];
 		let addedColumns = {};
 		let addedTables = [];
-		let addedTriggers = [];
 
 		let scripts = this.compareDatabaseObjects(
 			dbSourceObjects,
