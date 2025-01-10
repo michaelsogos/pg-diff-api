@@ -43,8 +43,10 @@ class CompareApi {
 		let droppedConstraints = [];
 		let droppedIndexes = [];
 		let droppedViews = [];
+		let droppedTriggers = [];
 		let addedColumns = {};
 		let addedTables = [];
+		let addedTriggers = [];
 
 		let scripts = this.compareDatabaseObjects(
 			dbSourceObjects,
@@ -124,8 +126,10 @@ class CompareApi {
 	 * @param {String[]} droppedConstraints
 	 * @param {String[]} droppedIndexes
 	 * @param {String[]} droppedViews
+	 * @param {String[]} droppedTriggers
 	 * @param {Object} addedColumns
 	 * @param {String[]} addedTables
+	 * @param {String[]} addedTriggers
 	 * @param {import("../models/config")} config
 	 * @param {import("events")} eventEmitter
 	 */
@@ -181,6 +185,17 @@ class CompareApi {
 
 		sqlPatch.push(...this.compareAggregates(dbSourceObjects.aggregates, dbTargetObjects.aggregates, config));
 		eventEmitter.emit("compare", "AGGREGATE objects have been compared", 75);
+
+		// we add the triggers comparison here because we need to compare the triggers after the tables and
+		// after the procedures because the triggers can be related to tables or procedures
+		sqlPatch.push(
+			...this.compareTablesTrigger(
+				dbSourceObjects.tables,
+				dbTargetObjects,
+				addedTables,
+			)
+		);
+		eventEmitter.emit("compare", "TRIGGER objects have been compared", 80);
 
 		return sqlPatch;
 	}
@@ -675,6 +690,75 @@ class CompareApi {
 		}
 
 		return sqlScript;
+	}
+
+	/**
+	 * 
+	 * @param {String} tableName 
+	 * @param {Object} sourceTableTriggers 
+	 * @param {Object} targetTableTriggers 
+	 * @returns 
+	 */
+	static compareTableTriggers(tableName, sourceTableTriggers, targetTableTriggers) {
+		let sqlScript = [];
+		// source triggers
+		for(let trigger in sourceTableTriggers) {
+			if(targetTableTriggers[trigger]) {
+				//Trigger exists on both database, then compare trigger schema
+				if(sourceTableTriggers[trigger].definition != targetTableTriggers[trigger].definition) {
+					sqlScript.push(sql.generateDropTriggerScript(tableName, trigger));
+					sqlScript.push(sql.generateCreateTriggerScript(sourceTableTriggers[trigger]));
+				}
+			} else {
+				//Trigger not exists on target database, then generate the script to create trigger
+				sqlScript.push(sql.generateCreateTriggerScript(sourceTableTriggers[trigger]));
+			}
+		}
+		// target triggers to be deleted
+		for(let trigger in targetTableTriggers) {
+			if(!sourceTableTriggers[trigger]) {
+				sqlScript.push(sql.generateDropTriggerScript(tableName, trigger));
+			}
+		}
+		return sqlScript;
+	}
+
+	static compareTablesTrigger(sourceTables, dbTargetObjects, addedTables) {
+		let finalizedScript = [];
+
+		for (let sourceTable in sourceTables) {
+			let sqlScript = [];
+			let actionLabel = "";
+
+			if (dbTargetObjects.tables[sourceTable]) {
+				//Table exists on both database, then compare table schema
+				actionLabel = "ALTER";
+
+				sqlScript.push(
+					...this.compareTableTriggers(
+						sourceTable,
+						sourceTables[sourceTable].triggers,
+						dbTargetObjects.tables[sourceTable].triggers
+					)
+				);
+			}
+			// triggers on newly added tatbles
+			if (addedTables.includes(sourceTable)) {
+				actionLabel = "ADD";
+
+				sqlScript.push(
+					...this.compareTableTriggers(
+						sourceTable,
+						sourceTables[sourceTable].triggers,
+						{}
+					)
+				);
+			}
+			finalizedScript.push(...this.finalizeScript(`${actionLabel} TRIGGER ${sourceTable}`, sqlScript));
+		}
+		// there is no need to drop triggers in the target database
+		// because the triggers are dropped when the table is dropped
+		return finalizedScript;
 	}
 
 	/**

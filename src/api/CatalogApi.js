@@ -126,6 +126,22 @@ const query = {
 	},
 	/**
 	 *
+	 * @param {String} schemaName
+	 * @param {String} tableName
+	 */
+	getTableTriggers: function (schemaName, tableName) {
+		return `SELECT tgname, pg_get_triggerdef(t.oid) AS definition, p.proname AS function_name, 
+					c.relname AS table_name, n.nspname AS schema_name, d.description AS comment
+				FROM pg_trigger t
+				INNER JOIN pg_class c ON c.oid = t.tgrelid
+				INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+				INNER JOIN pg_proc p ON p.oid = t.tgfoid
+				LEFT JOIN pg_description d ON d.objoid = t.oid AND d.objsubid = 0
+				WHERE n.nspname = '${schemaName}' AND c.relname = '${tableName}' AND t.tgisinternal = false
+		`;
+	},
+	/**
+	 *
 	 * @param {String[]} schemas
 	 */
 	getViews: function (schemas) {
@@ -425,6 +441,7 @@ class CatalogApi {
 					options: {},
 					indexes: {},
 					privileges: {},
+					triggers: {},
 					owner: table.tableowner,
 					comment: table.comment,
 				};
@@ -533,8 +550,19 @@ class CatalogApi {
 						};
 				});
 
+				//ADDED: Missing discovering of TRIGGER
+				let triggers = await client.query(query.getTableTriggers(table.schemaname, table.tablename));
+				triggers.rows.forEach((trigger) => {
+					result[fullTableName].triggers[trigger.tgname] = {
+						definition: trigger.definition,
+						function_name: trigger.function_name,
+						table_name: trigger.table_name,
+						schema_name: trigger.schema_name,
+						comment: trigger.comment,
+					};
+				});					
+
 				//TODO: Missing discovering of PARTITION
-				//TODO: Missing discovering of TRIGGER
 				//TODO: Missing discovering of GRANTS for COLUMNS
 				//TODO: Missing discovering of WITH GRANT OPTION, that is used to indicate if user\role can add GRANTS to other users
 			})

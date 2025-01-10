@@ -829,6 +829,27 @@ CREATE SEQUENCE IF NOT EXISTS ${sequence}
 		let script = `\nALTER SEQUENCE IF EXISTS ${old_name} RENAME TO ${new_name};\n`;
 		return script;
 	},
+
+	/**
+	 * 
+	 * @param {String} tableName 
+	 * @param {Object} trigger 
+	 * @returns 
+	 */
+	generateDropTriggerScript: function (tableName, trigger) {
+		let script = `\nDROP TRIGGER ${trigger} ON ${tableName};\n`;
+		return script;
+	},
+
+	/**
+	 * 
+	 * @param {Object} trigger 
+	 * @returns 
+	 */
+	generateCreateTriggerScript: function (trigger) {
+		let script = `\n${trigger.definition};\n`;
+		return script;
+	}
 };
 
 module.exports = helper;
