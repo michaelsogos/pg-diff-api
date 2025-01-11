@@ -4,13 +4,12 @@ const TableDefinition = require("../src/models/tableDefinition");
 
 Config.targetClient.database = "pg_diff_test2";
 Config.sourceClient.database = "pg_diff_test1";
-Config.sourceClient.port = 5437;
-Config.targetClient.port = 5437;
+Config.sourceClient.port = 5440;
+Config.targetClient.port = 5440;
 Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
 Config.compareOptions.outputDirectory = ".\\test\\patches";
 
-// Config.compareOptions.schemaCompare.roles = ["postgres", "huko"];
 Config.compareOptions.schemaCompare.namespaces = []; //["public", "schema_one"];
 Config.compareOptions.schemaCompare.dropMissingTable = true;
 Config.compareOptions.schemaCompare.dropMissingView = true;

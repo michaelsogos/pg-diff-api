@@ -29,7 +29,14 @@
 		"compare",
 		"tool"
 	],
-	"author": "Michael Sogos",
+	"author": "Michael Sogos <michael.sogos@gurustudioweb.it> (https://github.com/michaelsogos)",
+	"contributors": [
+		"captHarlock69",
+		"angulion",
+		"0xradical",
+		"AlekseiDanilov",
+		"JonathonCwik"
+	],
 	"license": "MIT",
 	"bugs": {
 		"url": "https://github.com/michaelsogos/pg-diff-api/issues",

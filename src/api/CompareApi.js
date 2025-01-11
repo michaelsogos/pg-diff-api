@@ -182,6 +182,9 @@ class CompareApi {
 		sqlPatch.push(...this.compareAggregates(dbSourceObjects.aggregates, dbTargetObjects.aggregates, config));
 		eventEmitter.emit("compare", "AGGREGATE objects have been compared", 75);
 
+		sqlPatch.push(...this.compareTablesTriggers(dbSourceObjects.tables, dbTargetObjects.tables, addedTables));
+		eventEmitter.emit("compare", "TRIGGER objects have been compared", 80);
+
 		return sqlPatch;
 	}
 
@@ -230,7 +233,7 @@ class CompareApi {
 
 	/**
 	 *
-	 * @param {Array} sourceTables
+	 * @param {Object} sourceTables
 	 * @param {import("../models/databaseObjects")} dbTargetObjects
 	 * @param {String[]} droppedConstraints
 	 * @param {String[]} droppedIndexes
@@ -674,6 +677,67 @@ class CompareApi {
 			}
 		}
 
+		return sqlScript;
+	}
+
+	/**
+	 *
+	 * @param {Object} sourceTables
+	 * @param {Object} targetTables
+	 * @param {String[]} addedTables
+	 * @returns
+	 */
+	static compareTablesTriggers(sourceTables, targetTables, addedTables) {
+		let finalizedScript = [];
+
+		for (let sourceTable in sourceTables) {
+			let sqlScript = [];
+
+			if (targetTables[sourceTable]) {
+				//Table exists on both database, then compare trigger schema
+				sqlScript.push(...this.compareTableTriggers(sourceTable, sourceTables[sourceTable].triggers, targetTables[sourceTable].triggers));
+			}
+
+			// triggers on newly added tatbles
+			if (addedTables.includes(sourceTable)) sqlScript.push(...this.compareTableTriggers(sourceTable, sourceTables[sourceTable].triggers, {}));
+
+			finalizedScript.push(...this.finalizeScript(`SET TRIGGERS FOR ${sourceTable}`, sqlScript));
+		}
+
+		return finalizedScript;
+	}
+
+	/**
+	 *
+	 * @param {String} tableName
+	 * @param {Object} sourceTableTriggers
+	 * @param {Object} targetTableTriggers
+	 * @returns
+	 */
+	static compareTableTriggers(tableName, sourceTableTriggers, targetTableTriggers) {
+		let sqlScript = [];
+		// source triggers
+		for (let trigger in sourceTableTriggers) {
+			if (targetTableTriggers[trigger]) {
+				//Trigger exists on both database, then compare trigger definition
+				if (sourceTableTriggers[trigger].definition != targetTableTriggers[trigger].definition) {
+					sqlScript.push(sql.generateDropTriggerScript(tableName, trigger));
+					sqlScript.push(sql.generateCreateTriggerScript(sourceTableTriggers[trigger]));
+					if (sourceTableTriggers[trigger].comment != targetTableTriggers[trigger].comment)
+						sqlScript.push(sql.generateChangeCommentScript(objectType.TRIGGER, trigger, sourceTableTriggers[trigger].comment, tableName));
+				}
+			} else {
+				//Trigger not exists on target database, then generate the script to create trigger
+				sqlScript.push(sql.generateCreateTriggerScript(sourceTableTriggers[trigger]));
+				sqlScript.push(sql.generateChangeCommentScript(objectType.TRIGGER, trigger, sourceTableTriggers[trigger].comment, tableName));
+			}
+		}
+		// target triggers to be deleted
+		for (let trigger in targetTableTriggers) {
+			if (!sourceTableTriggers[trigger]) {
+				sqlScript.push(sql.generateDropTriggerScript(tableName, trigger));
+			}
+		}
 		return sqlScript;
 	}
 

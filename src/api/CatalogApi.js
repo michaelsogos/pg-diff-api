@@ -105,7 +105,7 @@ const query = {
 				INNER JOIN pg_namespace tbln ON tbl.relnamespace = tbln.oid
                 INNER JOIN pg_class idx ON idx.oid = i.indexrelid
 				LEFT JOIN pg_description d ON d.objoid = idx."oid" AND d.objsubid = 0
-				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false AND i.indisunique = FALSE`;
+				WHERE tbln.nspname = '${schemaName}' AND tbl.relname='${tableName}' AND i.indisprimary = false AND i.indisunique = false`;
 	},
 	/**
 	 *
@@ -123,6 +123,21 @@ const query = {
                 HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'TRIGGER') as trigger
                 FROM pg_tables t, pg_user u 
                 WHERE t.schemaname = '${schemaName}' and t.tablename='${tableName}'`;
+	},
+	/**
+	 *
+	 * @param {String} schemaName
+	 * @param {String} tableName
+	 */
+	getTableTriggers: function (schemaName, tableName) {
+		return `SELECT tgname as triggername, pg_get_triggerdef(t.oid) AS triggerdef, p.proname AS functionname, d.description AS comment
+				FROM pg_trigger t
+				INNER JOIN pg_class c ON c.oid = t.tgrelid
+				INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+				INNER JOIN pg_proc p ON p.oid = t.tgfoid
+				LEFT JOIN pg_description d ON d.objoid = t.oid AND d.objsubid = 0
+				WHERE n.nspname = '${schemaName}' AND c.relname = '${tableName}' AND t.tgisinternal = false
+		`;
 	},
 	/**
 	 *
@@ -214,7 +229,8 @@ const query = {
 	getFunctions: function (schemas, serverVersion) {
 		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
 		return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, 
-				oidvectortypes(proargtypes) as argtypes, d.description AS comment, p.prokind
+				oidvectortypes(proargtypes) as argtypes, d.description AS comment, 
+				${core.checkServerCompatibility(serverVersion, 11, 0) ? "p.prokind" : "'f' as prokind"}
 				FROM pg_proc p
 				INNER JOIN pg_namespace n ON n.oid = p.pronamespace
 				LEFT JOIN pg_description d ON d.objoid = p."oid" AND d.objsubid = 0
@@ -425,6 +441,7 @@ class CatalogApi {
 					options: {},
 					indexes: {},
 					privileges: {},
+					triggers: {},
 					owner: table.tableowner,
 					comment: table.comment,
 				};
@@ -533,8 +550,16 @@ class CatalogApi {
 						};
 				});
 
+				let triggers = await client.query(query.getTableTriggers(table.schemaname, table.tablename));
+				triggers.rows.forEach((trigger) => {
+					result[fullTableName].triggers[trigger.triggername] = {
+						definition: trigger.triggerdef,
+						function_name: trigger.functionname,
+						comment: trigger.comment,
+					};
+				});
+
 				//TODO: Missing discovering of PARTITION
-				//TODO: Missing discovering of TRIGGER
 				//TODO: Missing discovering of GRANTS for COLUMNS
 				//TODO: Missing discovering of WITH GRANT OPTION, that is used to indicate if user\role can add GRANTS to other users
 			})
