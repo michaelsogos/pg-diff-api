@@ -93,6 +93,7 @@ class core {
 			password: config.password,
 			port: config.port,
 			application_name: config.applicationName,
+			ssl: config.ssl,
 		});
 
 		await client.connect();
