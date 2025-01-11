@@ -11,4 +11,6 @@ module.exports = {
 	password: null,
 	/** @type {String} */
 	applicationName: "pg-diff-api",
+	/** @type {Boolean} */
+	ssl: false
 };

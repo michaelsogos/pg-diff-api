@@ -9,6 +9,7 @@ module.exports = {
 		/** @type {String} */
 		password: null,
 		applicationName: "pg-diff-api",
+		ssl: false,
 	},
 	sourceClient: {
 		host: "localhost",
@@ -18,6 +19,7 @@ module.exports = {
 		/** @type {String} */
 		password: null,
 		applicationName: "pg-diff-api",
+		ssl: false,
 	},
 	compareOptions: {
 		outputDirectory: "db_patches",
