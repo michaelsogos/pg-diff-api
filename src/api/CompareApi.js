@@ -1004,7 +1004,7 @@ class CompareApi {
 							...this.compareProcedurePrivileges(
 								aggregate,
 								aggregateArgs,
-								sourceFunctions[procedure][procedureArgs].type,
+								sourceAggregates[aggregate][aggregateArgs].type,
 								sourceAggregates[aggregate][aggregateArgs].privileges,
 								targetAggregates[aggregate][aggregateArgs].privileges
 							)
