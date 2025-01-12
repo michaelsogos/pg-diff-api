@@ -10,6 +10,8 @@ const hints = {
 		" --WARN: Grant\\Revoke privileges to a role can occure in a sql error during execution if role is missing to the target database!",
 	identityColumnDetected: " --WARN: Identity column has been detected, an error can occure because constraints violation!",
 	dropTable: " --WARN: Drop table can occure in data loss!",
+	extensionNotInstalled: " -- WARN: Extension must be firstly installed at server level otherwise an error can occure during patch execution!",
+	extensionToUpdate: " -- WARN: Extension must be firstly updated at server level otherwise an error can occure during patch execution!",
 };
 
 var helper = {
@@ -137,7 +139,7 @@ var helper = {
 	 * @param {String} table
 	 */
 	generateDropTableScript: function (table) {
-		let script = `\nDROP TABLE IF EXISTS ${table};\n`;
+		let script = `\nDROP TABLE IF EXISTS ${table}; ${hints.dropTable}\n`;
 		return script;
 	},
 	/**
@@ -839,7 +841,6 @@ CREATE SEQUENCE IF NOT EXISTS ${sequence}
 		let script = `\nDROP TRIGGER ${trigger} ON ${tableName};\n`;
 		return script;
 	},
-
 	/**
 	 *
 	 * @param {Object} trigger
@@ -847,6 +848,25 @@ CREATE SEQUENCE IF NOT EXISTS ${sequence}
 	 */
 	generateCreateTriggerScript: function (trigger) {
 		let script = `\n${trigger.definition};\n`;
+		return script;
+	},
+	/**
+	 *
+	 * @param {String} name
+	 * @returns
+	 */
+	generateCreateExtensionScript: function (name) {
+		let script = `\nCREATE EXTENSION IF NOT EXISTS "${name}";${hints.extensionNotInstalled}\n`;
+		return script;
+	},
+	/**
+	 *
+	 * @param {String} name
+	 * @param {String} version
+	 * @returns
+	 */
+	generateUpdateExtensionScript: function (name, version) {
+		let script = `\nALTER EXTENSION "${name}" UPDATE TO '${version}';${hints.extensionToUpdate}\n`;
 		return script;
 	},
 };

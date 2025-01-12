@@ -58,7 +58,6 @@ class CompareApi {
 			eventEmitter
 		);
 
-		//The progress step size is 20
 		if (config.compareOptions.dataCompare.enable) {
 			scripts.push(
 				...(await this.compareTablesRecords(
@@ -107,6 +106,7 @@ class CompareApi {
 		dbObjects.functions = await catalogApi.retrieveFunctions(client, config);
 		dbObjects.aggregates = await catalogApi.retrieveAggregates(client, config);
 		dbObjects.sequences = await catalogApi.retrieveSequences(client, config);
+		dbObjects.extensions = await catalogApi.retrieveExtensions(client);
 
 		//TODO: Add a way to retrieve AGGREGATE and WINDOW functions
 		//TODO: Do we need to retrieve roles?
@@ -142,11 +142,14 @@ class CompareApi {
 	) {
 		let sqlPatch = [];
 
-		sqlPatch.push(...this.compareSchemas(dbSourceObjects.schemas, dbTargetObjects.schemas));
+		sqlPatch.push(...this.compareExtensions(dbSourceObjects.extensions, dbTargetObjects.extensions));
 		eventEmitter.emit("compare", "SCHEMA objects have been compared", 45);
 
+		sqlPatch.push(...this.compareSchemas(dbSourceObjects.schemas, dbTargetObjects.schemas));
+		eventEmitter.emit("compare", "SCHEMA objects have been compared", 50);
+
 		sqlPatch.push(...this.compareSequences(dbSourceObjects.sequences, dbTargetObjects.sequences));
-		eventEmitter.emit("compare", "SEQUENCE objects have been compared", 50);
+		eventEmitter.emit("compare", "SEQUENCE objects have been compared", 55);
 
 		sqlPatch.push(
 			...this.compareTables(
@@ -160,10 +163,10 @@ class CompareApi {
 				config
 			)
 		);
-		eventEmitter.emit("compare", "TABLE objects have been compared", 55);
+		eventEmitter.emit("compare", "TABLE objects have been compared", 60);
 
 		sqlPatch.push(...this.compareViews(dbSourceObjects.views, dbTargetObjects.views, droppedViews, config));
-		eventEmitter.emit("compare", "VIEW objects have been compared", 60);
+		eventEmitter.emit("compare", "VIEW objects have been compared", 65);
 
 		sqlPatch.push(
 			...this.compareMaterializedViews(
@@ -174,16 +177,16 @@ class CompareApi {
 				config
 			)
 		);
-		eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 65);
+		eventEmitter.emit("compare", "MATERIALIZED VIEW objects have been compared", 70);
 
 		sqlPatch.push(...this.compareProcedures(dbSourceObjects.functions, dbTargetObjects.functions, config));
-		eventEmitter.emit("compare", "PROCEDURE objects have been compared", 70);
+		eventEmitter.emit("compare", "PROCEDURE objects have been compared", 75);
 
 		sqlPatch.push(...this.compareAggregates(dbSourceObjects.aggregates, dbTargetObjects.aggregates, config));
-		eventEmitter.emit("compare", "AGGREGATE objects have been compared", 75);
+		eventEmitter.emit("compare", "AGGREGATE objects have been compared", 80);
 
 		sqlPatch.push(...this.compareTablesTriggers(dbSourceObjects.tables, dbTargetObjects.tables, addedTables));
-		eventEmitter.emit("compare", "TRIGGER objects have been compared", 80);
+		eventEmitter.emit("compare", "TRIGGER objects have been compared", 85);
 
 		return sqlPatch;
 	}
@@ -478,7 +481,7 @@ class CompareApi {
 			for (let view in dbTargetObjects.views) {
 				dbTargetObjects.views[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
-					if (fullDependencyName == tableName && dependency.columnName == columnName) {
+					if (fullDependencyName == tableName && dependency.columnName == rawColumnName) {
 						sqlScript.push(sql.generateDropViewScript(view));
 						droppedViews.push(view);
 					}
@@ -489,7 +492,7 @@ class CompareApi {
 			for (let view in dbTargetObjects.materializedViews) {
 				dbTargetObjects.materializedViews[view].dependencies.forEach((dependency) => {
 					let fullDependencyName = `"${dependency.schemaName}"."${dependency.tableName}"`;
-					if (fullDependencyName == tableName && dependency.columnName == columnName) {
+					if (fullDependencyName == tableName && dependency.columnName == rawColumnName) {
 						sqlScript.push(sql.generateDropMaterializedViewScript(view));
 						droppedViews.push(view);
 					}
@@ -1501,7 +1504,7 @@ class CompareApi {
 
 			if (targetRecord[field] === undefined && this.checkIsNewColumn(addedColumns, table, field)) {
 				changes[field] = sourceRecord[field];
-			} else if (this.compareFieldValues(sourceRecord[field], targetRecord[field])) {
+			} else if (this.checkFieldValueChanged(sourceRecord[field], targetRecord[field])) {
 				changes[field] = sourceRecord[field];
 			}
 		}
@@ -1536,11 +1539,11 @@ class CompareApi {
 	 * @param {Object} sourceValue
 	 * @param {Object} targetValue
 	 */
-	static compareFieldValues(sourceValue, targetValue) {
+	static checkFieldValueChanged(sourceValue, targetValue) {
 		var sourceValueType = typeof sourceValue;
 		var targetValueType = typeof targetValue;
 
-		if (sourceValueType != targetValueType) return false;
+		if (sourceValueType != targetValueType) return true;
 		else if (sourceValue instanceof Date) return sourceValue.getTime() !== targetValue.getTime();
 		else if (sourceValue instanceof Object) return !deepEqual(sourceValue, targetValue);
 		else return sourceValue !== targetValue;
@@ -1610,6 +1613,42 @@ class CompareApi {
 				reject(err);
 			}
 		});
+	}
+
+	/**
+	 *
+	 * @param {Object} sourceExtensions
+	 * @param {Object} targetExtensions
+	 */
+	static compareExtensions(sourceExtensions, targetExtensions) {
+		let finalizedScript = [];
+		let actionLabel = "";
+
+		for (let sourceExtension in sourceExtensions) {
+			let sqlScript = [];
+
+			if (!sourceExtensions[sourceExtension].version) continue;
+
+			if (!targetExtensions[sourceExtension]) {
+				actionLabel = "INSTALL";
+				finalizedScript.push(`\n--ERROR: The extension "${sourceExtension}" cannot be installed on target server!\n`);
+			} else if (!targetExtensions[sourceExtension].version) {
+				//Extension not installed on target database, then generate script to install extension
+				actionLabel = "INSTALL";
+				sqlScript.push(sql.generateCreateExtensionScript(sourceExtension));
+			} else if (
+				targetExtensions[sourceExtension].version &&
+				targetExtensions[sourceExtension].version != sourceExtensions[sourceExtension].version
+			) {
+				//Extension is already installed on target database but extension version mismatch, then generate script to update extension
+				actionLabel = "UPDATE";
+				sqlScript.push(sql.generateUpdateExtensionScript(sourceExtension, sourceExtension[sourceExtension].version));
+			}
+
+			finalizedScript.push(...this.finalizeScript(`${actionLabel} EXTENSION "${sourceExtension}"`, sqlScript));
+		}
+
+		return finalizedScript;
 	}
 }
 

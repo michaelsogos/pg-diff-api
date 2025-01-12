@@ -1,6 +1,6 @@
 {
 	"name": "pg-diff-api",
-	"version": "1.5.1",
+	"version": "1.5.2",
 	"description": "PostgreSQL migration strategy for NodeJS",
 	"pgver": "9.6+",
 	"main": "./src/index.js",
@@ -35,7 +35,8 @@
 		"angulion",
 		"0xradical",
 		"AlekseiDanilov",
-		"JonathonCwik"
+		"JonathonCwik",
+		"olivierdalang"
 	],
 	"license": "MIT",
 	"bugs": {

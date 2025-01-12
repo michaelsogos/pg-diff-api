@@ -371,6 +371,9 @@ const query = {
 				}
                 WHERE s.sequence_schema = '${schemaName}' and s.sequence_name='${sequenceName}'`;
 	},
+	getAvailableExtensions: function () {
+		return `SELECT name, installed_version FROM pg_available_extensions`;
+	},
 };
 
 class CatalogApi {
@@ -823,6 +826,32 @@ class CatalogApi {
 				});
 			})
 		);
+		return result;
+	}
+
+	/**
+	 *
+	 * @param {import("pg").Client} client
+	 * @param {import("../models/config")} config
+	 */
+	static async retrieveExtensions(client) {
+		let result = {};
+
+		const extensions = await client.query(query.getAvailableExtensions());
+
+		await Promise.all(
+			extensions.rows.map(
+				async (
+					/** @type {{name:String, installed_version:String}} */
+					extension
+				) => {
+					result[extension.name] = {
+						version: extension.installed_version,
+					};
+				}
+			)
+		);
+
 		return result;
 	}
 }
