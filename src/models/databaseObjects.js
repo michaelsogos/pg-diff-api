@@ -14,6 +14,8 @@ class DatabaseObjects {
 		this.aggregates = null;
 		/** @type {Object} The definition of sequences*/
 		this.sequences = null;
+		/** @type {Object} The definition of extensions*/
+		this.extensions = null;
 	}
 }
 
