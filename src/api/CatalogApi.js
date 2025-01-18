@@ -6,7 +6,6 @@ const query = {
 	 * @param {String[]} schemas
 	 */
 	getAllSchemas: function () {
-		//TODO: Instead of using ::regrole casting, for better performance join with pg_roles
 		return `SELECT nspname FROM pg_namespace 
 					WHERE nspname NOT IN ('pg_catalog','information_schema')
 					AND nspname NOT LIKE 'pg_toast%'
@@ -113,16 +112,16 @@ const query = {
 	 * @param {String} tableName
 	 */
 	getTablePrivileges: function (schemaName, tableName) {
-		return `SELECT t.schemaname, t.tablename, u.usename, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'SELECT') as select,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'INSERT') as insert,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'UPDATE') as update,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'DELETE') as delete, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'TRUNCATE') as truncate,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'REFERENCES') as references,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${tableName}"', 'TRIGGER') as trigger
-                FROM pg_tables t, pg_user u 
-                WHERE t.schemaname = '${schemaName}' and t.tablename='${tableName}'`;
+		return `SELECT t.schemaname, t.tablename, r.rolname, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'SELECT') as select,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'INSERT') as insert,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'UPDATE') as update,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'DELETE') as delete, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'TRUNCATE') as truncate,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'REFERENCES') as references,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${tableName}"', 'TRIGGER') as trigger
+                FROM pg_tables t, pg_roles r 
+                WHERE t.schemaname = '${schemaName}' and t.tablename = '${tableName}'`;
 	},
 	/**
 	 *
@@ -162,15 +161,15 @@ const query = {
 	 * @param {String} viewName
 	 */
 	getViewPrivileges: function (schemaName, viewName) {
-		return `SELECT v.schemaname, v.viewname, u.usename, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'SELECT') as select,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'INSERT') as insert,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'UPDATE') as update,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'DELETE') as delete, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'TRUNCATE') as truncate,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'REFERENCES') as references,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'TRIGGER') as trigger
-                FROM pg_views v, pg_user u 
+		return `SELECT v.schemaname, v.viewname, r.rolname, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'SELECT') as select,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'INSERT') as insert,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'UPDATE') as update,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'DELETE') as delete, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'TRUNCATE') as truncate,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'REFERENCES') as references,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'TRIGGER') as trigger
+                FROM pg_views v, pg_roles r 
                 WHERE v.schemaname = '${schemaName}' and v.viewname='${viewName}'`;
 	},
 	/**
@@ -191,15 +190,15 @@ const query = {
 	 * @param {String} viewName
 	 */
 	getMaterializedViewPrivileges: function (schemaName, viewName) {
-		return `SELECT v.schemaname, v.matviewname, u.usename, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'SELECT') as select,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'INSERT') as insert,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'UPDATE') as update,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'DELETE') as delete, 
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'TRUNCATE') as truncate,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'REFERENCES') as references,
-                HAS_TABLE_PRIVILEGE(u.usename,'"${schemaName}"."${viewName}"', 'TRIGGER') as trigger
-                FROM pg_matviews v, pg_user u 
+		return `SELECT v.schemaname, v.matviewname, r.rolname, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'SELECT') as select,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'INSERT') as insert,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'UPDATE') as update,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'DELETE') as delete, 
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'TRUNCATE') as truncate,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'REFERENCES') as references,
+                HAS_TABLE_PRIVILEGE(r.rolname,'"${schemaName}"."${viewName}"', 'TRIGGER') as trigger
+                FROM pg_matviews v, pg_roles r 
                 WHERE v.schemaname = '${schemaName}' and v.matviewname='${viewName}'`;
 	},
 	/**
@@ -324,11 +323,10 @@ const query = {
 	 * @param {String} argTypes
 	 */
 	getFunctionPrivileges: function (schemaName, functionName, argTypes) {
-		return `SELECT n.nspname as pronamespace, p.proname, u.usename, 
-                HAS_FUNCTION_PRIVILEGE(u.usename,'"${schemaName}"."${functionName}"(${argTypes})','EXECUTE') as execute  
-				FROM pg_proc p, pg_user u 
-                INNER JOIN pg_namespace n ON n.nspname = '${schemaName}' 				
-				WHERE p.proname='${functionName}' AND p.pronamespace = n.oid`;
+		return `SELECT g.specific_schema AS pronamespace, g.routine_name AS proname, g.grantee AS rolname, TRUE AS execute                 
+				FROM pg_proc p, information_schema.role_routine_grants g                 			
+				WHERE g.specific_schema = '${schemaName}' AND p.proname = '${functionName}' AND oidvectortypes(p.proargtypes) = '${argTypes}'
+				AND g.grantee != 'PUBLIC' AND g.privilege_type = 'EXECUTE' AND g.specific_name = CONCAT(p.proname,'_',p.oid)`;
 	},
 	/**
 	 *
@@ -360,13 +358,13 @@ const query = {
 	 * @param {import("../models/serverVersion")} serverVersion
 	 */
 	getSequencePrivileges: function (schemaName, sequenceName, serverVersion) {
-		return `SELECT s.sequence_schema, s.sequence_name, u.usename, ${
+		return `SELECT s.sequence_schema, s.sequence_name, r.rolname, ${
 			core.checkServerCompatibility(serverVersion, 10, 0) ? "NULL AS cache_value," : "p.cache_value,"
 		}
-                HAS_SEQUENCE_PRIVILEGE(u.usename,'"${schemaName}"."${sequenceName}"', 'SELECT') as select,
-                HAS_SEQUENCE_PRIVILEGE(u.usename,'"${schemaName}"."${sequenceName}"', 'USAGE') as usage,
-                HAS_SEQUENCE_PRIVILEGE(u.usename,'"${schemaName}"."${sequenceName}"', 'UPDATE') as update
-                FROM information_schema.sequences s, pg_user u ${
+                HAS_SEQUENCE_PRIVILEGE(r.rolname,'"${schemaName}"."${sequenceName}"', 'SELECT') as select,
+                HAS_SEQUENCE_PRIVILEGE(r.rolname,'"${schemaName}"."${sequenceName}"', 'USAGE') as usage,
+                HAS_SEQUENCE_PRIVILEGE(r.rolname,'"${schemaName}"."${sequenceName}"', 'UPDATE') as update
+                FROM information_schema.sequences s, pg_roles r ${
 					core.checkServerCompatibility(serverVersion, 10, 0) ? "" : ', "' + schemaName + '"."' + sequenceName + '" p'
 				}
                 WHERE s.sequence_schema = '${schemaName}' and s.sequence_name='${sequenceName}'`;
@@ -540,9 +538,9 @@ class CatalogApi {
 				privileges.rows.forEach((privilege) => {
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullTableName].privileges[privilege.usename] = {
+						result[fullTableName].privileges[privilege.rolname] = {
 							select: privilege.select,
 							insert: privilege.insert,
 							update: privilege.update,
@@ -606,9 +604,9 @@ class CatalogApi {
 				privileges.rows.forEach((privilege) => {
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullViewName].privileges[privilege.usename] = {
+						result[fullViewName].privileges[privilege.rolname] = {
 							select: privilege.select,
 							insert: privilege.insert,
 							update: privilege.update,
@@ -672,9 +670,9 @@ class CatalogApi {
 				privileges.rows.forEach((privilege) => {
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullViewName].privileges[privilege.usename] = {
+						result[fullViewName].privileges[privilege.rolname] = {
 							select: privilege.select,
 							insert: privilege.insert,
 							update: privilege.update,
@@ -730,9 +728,9 @@ class CatalogApi {
 				privileges.rows.forEach((privilege) => {
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullProcedureName][procedure.argtypes].privileges[privilege.usename] = {
+						result[fullProcedureName][procedure.argtypes].privileges[privilege.rolname] = {
 							execute: privilege.execute,
 						};
 				});
@@ -770,9 +768,9 @@ class CatalogApi {
 				privileges.rows.forEach((privilege) => {
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullAggregateName][aggregate.argtypes].privileges[privilege.usename] = {
+						result[fullAggregateName][aggregate.argtypes].privileges[privilege.rolname] = {
 							execute: privilege.execute,
 						};
 				});
@@ -816,9 +814,9 @@ class CatalogApi {
 
 					if (
 						config.compareOptions.schemaCompare.roles.length <= 0 ||
-						config.compareOptions.schemaCompare.roles.includes(privilege.usename)
+						config.compareOptions.schemaCompare.roles.includes(privilege.rolname)
 					)
-						result[fullSequenceName].privileges[privilege.usename] = {
+						result[fullSequenceName].privileges[privilege.rolname] = {
 							select: privilege.select,
 							usage: privilege.usage,
 							update: privilege.update,
