@@ -4,8 +4,8 @@ const TableDefinition = require("../src/models/tableDefinition");
 
 Config.targetClient.database = "pg_diff_test2";
 Config.sourceClient.database = "pg_diff_test1";
-Config.sourceClient.port = 5440;
-Config.targetClient.port = 5440;
+Config.sourceClient.port = 5436;
+Config.targetClient.port = 5436;
 Config.targetClient.password = "postgres";
 Config.sourceClient.password = "postgres";
 Config.compareOptions.outputDirectory = ".\\test\\patches";
